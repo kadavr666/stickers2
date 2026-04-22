@@ -366,15 +366,26 @@
       bottom: 0;
       left: 0;
       right: 0;
-      justify-content: center;
-      align-items: center;
-      align-content: center;
       padding: 10px 12px 16px;
       gap: 8px;
       border-radius: 0;
       flex-wrap: wrap;
       background: #fff;
       border-top: 1px solid #ccc;
+    }
+
+    .palette .sticker-row {
+      display: flex;
+      width: 100%;
+      gap: 8px;
+      align-items: center;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+      flex-wrap: nowrap;
+    }
+    .palette .sticker-row::-webkit-scrollbar {
+      display: none;
     }
 
     .palette .month-row {
@@ -634,9 +645,24 @@ function render() {
     row.appendChild(nextBtn);
     paletteEl.insertBefore(row, paletteEl.firstChild);
   } else if (isMobile && paletteMonthRow) {
-    paletteMonthRow.querySelector('.month-label').textContent = MONTHS[currentMonth] + ' ' + currentYear;
+    paletteMonthRow.querySelector('.month-label').textContent = (MONTHS[currentMonth] + ' ' + currentYear).toUpperCase();
   } else if (!isMobile && paletteMonthRow) {
     paletteMonthRow.remove();
+  }
+
+  // Wrap/unwrap stickers in scrollable row on mobile
+  const existingRow = paletteEl.querySelector('.sticker-row');
+  if (isMobile && !existingRow) {
+    const row = document.createElement('div');
+    row.className = 'sticker-row';
+    const stickers = Array.from(paletteEl.querySelectorAll('.sticker, .add-btn'));
+    stickers.forEach(s => row.appendChild(s));
+    const saveLnk = paletteEl.querySelector('.save-link');
+    paletteEl.insertBefore(row, saveLnk);
+  } else if (!isMobile && existingRow) {
+    const items = Array.from(existingRow.children);
+    items.forEach(s => paletteEl.appendChild(s));
+    existingRow.remove();
   }
   const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
   let firstDow = new Date(currentYear, currentMonth, 1).getDay();
