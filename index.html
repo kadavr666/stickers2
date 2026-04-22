@@ -36,20 +36,20 @@
   }
 
   .day-header {
-    border-right: 1px solid #000;
+    border-right: 1px solid #ccc;
     padding: 4px 8px;
     font-size: 9px;
     font-weight: 400;
     text-transform: uppercase;
     letter-spacing: 1px;
-    color: #000;
+    color: #999;
     text-align: center;
   }
 
   .cell {
     position: relative;
-    border-right: 1px solid #000;
-    border-bottom: 1px solid #000;
+    border-right: 1px solid #ccc;
+    border-bottom: 1px solid #ccc;
     overflow: hidden;
     min-height: 0;
   }
@@ -59,9 +59,22 @@
     position: absolute;
     top: 3px;
     right: 4px;
-    font-size: 13px;
-    color: #000;
+    font-size: 9px;
+    color: #999;
     font-weight: 400;
+    z-index: 1;
+    pointer-events: none;
+  }
+  .cell .day-name {
+    display: none;
+    position: absolute;
+    top: 3px;
+    left: 4px;
+    font-size: 8px;
+    color: #999;
+    font-weight: 400;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
     z-index: 1;
     pointer-events: none;
   }
@@ -307,87 +320,108 @@
       flex: none;
       width: 100vw;
       min-height: 0;
+      grid-template-columns: repeat(2, 1fr);
+      padding-bottom: 200px;
     }
 
+    .day-header { display: none; }
+
     .cell {
-      min-height: 14vw;
+      min-height: 40vw;
     }
 
     .cell .date-num {
-      font-size: 10px;
+      font-size: 8px;
+    }
+
+    .cell .day-name {
+      display: block;
     }
 
     .placed-sticker {
-      width: 36px;
-      height: 36px;
+      width: 44px;
+      height: 44px;
     }
 
     .sticker-label {
-      font-size: 5px;
+      font-size: 6px;
     }
 
-    .sticker-icon {
-      width: 16px;
-      height: 16px;
+    .sticker-icon svg {
+      width: 18px;
+      height: 18px;
     }
 
     .drag-ghost {
-      width: 36px;
-      height: 36px;
+      width: 44px;
+      height: 44px;
     }
 
     .bottom-bar {
-      position: fixed;
-      bottom: 0;
-      padding: 8px 16px;
-      background: #fff;
-      z-index: 100;
-    }
-
-    .month-label {
-      font-size: 11px;
-    }
-
-    .month-nav {
-      font-size: 11px;
-      padding: 8px 12px;
+      display: none;
     }
 
     .palette {
       position: fixed;
-      bottom: 36px;
+      bottom: 0;
       left: 0;
       right: 0;
       justify-content: center;
-      padding: 8px 10px;
-      gap: 6px;
+      align-items: center;
+      align-content: center;
+      padding: 10px 12px 16px;
+      gap: 8px;
       border-radius: 0;
+      flex-wrap: wrap;
+      background: #fff;
+      border-top: 1px solid #ccc;
+    }
+
+    .palette .month-row {
+      display: flex;
+      width: 100%;
+      justify-content: center;
+      align-items: center;
+      gap: 8px;
+      order: -1;
+      padding-bottom: 10px;
+      margin-bottom: 10px;
+      border-bottom: 1px solid #ccc;
+    }
+
+    .palette .month-row .month-label {
+      font-size: 11px;
+    }
+
+    .palette .month-row .month-nav {
+      font-size: 11px;
+      padding: 4px 8px;
     }
 
     .palette .sticker {
-      width: 40px;
-      height: 40px;
+      width: 44px;
+      height: 44px;
+      flex-shrink: 0;
     }
 
     .add-btn {
-      width: 40px;
-      height: 40px;
-      font-size: 18px;
+      width: 44px;
+      height: 44px;
+      font-size: 20px;
+      flex-shrink: 0;
     }
 
     .trash {
-      width: 40px;
-      height: 40px;
-      font-size: 20px;
-      bottom: 90px;
+      width: 44px;
+      height: 44px;
+      font-size: 22px;
+      bottom: 200px;
       left: 50%;
       transform: translateX(-50%);
     }
 
     .save-link {
-      bottom: 4px;
-      left: 50%;
-      transform: translateX(-50%);
+      display: none;
     }
 
     .add-popup {
@@ -397,9 +431,6 @@
       right: auto;
       transform: translate(-50%, -50%);
     }
-
-    /* extra bottom padding so palette doesn't cover last row */
-    .calendar { padding-bottom: 100px; }
   }
 </style>
 </head>
@@ -587,29 +618,57 @@ function isOverTrash(x, y) {
 function render() {
   const cal = document.getElementById('calendar');
   cal.innerHTML = '';
-  document.getElementById('month-label').textContent = MONTHS[currentMonth] + ' ' + currentYear;
+  document.getElementById('month-label').textContent = (MONTHS[currentMonth] + ' ' + currentYear).toUpperCase();
 
-  DAYS.forEach(d => {
-    const el = document.createElement('div');
-    el.className = 'day-header';
-    el.textContent = d;
-    cal.appendChild(el);
-  });
+  const isMobile = window.innerWidth <= 600;
 
+  // On mobile, move month nav into palette
+  const paletteMonthRow = document.querySelector('.palette .month-row');
+  if (isMobile && !paletteMonthRow) {
+    const row = document.createElement('div');
+    row.className = 'month-row';
+    const prevBtn = document.createElement('span');
+    prevBtn.className = 'month-nav';
+    prevBtn.innerHTML = '&larr;';
+    prevBtn.addEventListener('click', () => { currentMonth--; if (currentMonth < 0) { currentMonth = 11; currentYear--; } render(); });
+    const lbl = document.createElement('span');
+    lbl.className = 'month-label';
+    lbl.id = 'palette-month-label';
+    lbl.textContent = (MONTHS[currentMonth] + ' ' + currentYear).toUpperCase();
+    const nextBtn = document.createElement('span');
+    nextBtn.className = 'month-nav';
+    nextBtn.innerHTML = '&rarr;';
+    nextBtn.addEventListener('click', () => { currentMonth++; if (currentMonth > 11) { currentMonth = 0; currentYear++; } render(); });
+    row.appendChild(prevBtn);
+    row.appendChild(lbl);
+    row.appendChild(nextBtn);
+    paletteEl.insertBefore(row, paletteEl.firstChild);
+  } else if (isMobile && paletteMonthRow) {
+    paletteMonthRow.querySelector('.month-label').textContent = MONTHS[currentMonth] + ' ' + currentYear;
+  } else if (!isMobile && paletteMonthRow) {
+    paletteMonthRow.remove();
+  }
   const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
   let firstDow = new Date(currentYear, currentMonth, 1).getDay();
   firstDow = firstDow === 0 ? 6 : firstDow - 1;
 
-  const numRows = Math.ceil((firstDow + daysInMonth) / 7);
-  const isMobile = window.innerWidth <= 600;
-  cal.style.gridTemplateRows = isMobile
-    ? `auto repeat(${numRows}, 14vw)`
-    : `auto repeat(${numRows}, 1fr)`;
-
-  for (let e = 0; e < firstDow; e++) {
-    const empty = document.createElement('div');
-    empty.className = 'cell empty';
-    cal.appendChild(empty);
+  if (isMobile) {
+    const numRows = Math.ceil(daysInMonth / 2);
+    cal.style.gridTemplateRows = `repeat(${numRows}, 40vw)`;
+  } else {
+    DAYS.forEach(d => {
+      const el = document.createElement('div');
+      el.className = 'day-header';
+      el.textContent = d;
+      cal.appendChild(el);
+    });
+    const numRows = Math.ceil((firstDow + daysInMonth) / 7);
+    cal.style.gridTemplateRows = `auto repeat(${numRows}, 1fr)`;
+    for (let e = 0; e < firstDow; e++) {
+      const empty = document.createElement('div');
+      empty.className = 'cell empty';
+      cal.appendChild(empty);
+    }
   }
 
   for (let day = 1; day <= daysInMonth; day++) {
@@ -622,6 +681,14 @@ function render() {
     dn.className = 'date-num';
     dn.textContent = day;
     cell.appendChild(dn);
+
+    // Day name for mobile (hidden on desktop via CSS)
+    let dow = new Date(currentYear, currentMonth, day).getDay();
+    dow = dow === 0 ? 6 : dow - 1;
+    const dayName = document.createElement('span');
+    dayName.className = 'day-name';
+    dayName.textContent = DAYS[dow];
+    cell.appendChild(dayName);
 
     const stickers = calendarData[key] || [];
     stickers.forEach((st, idx) => {
@@ -650,11 +717,13 @@ function render() {
     cal.appendChild(cell);
   }
 
-  const lastDow = (firstDow + daysInMonth - 1) % 7;
-  for (let e = lastDow + 1; e < 7; e++) {
-    const empty = document.createElement('div');
-    empty.className = 'cell empty';
-    cal.appendChild(empty);
+  if (!isMobile) {
+    const lastDow = (firstDow + daysInMonth - 1) % 7;
+    for (let e = lastDow + 1; e < 7; e++) {
+      const empty = document.createElement('div');
+      empty.className = 'cell empty';
+      cal.appendChild(empty);
+    }
   }
 }
 
@@ -839,12 +908,6 @@ function renderCustomPaletteStickers() {
     const el = document.createElement('div');
     el.className = 'sticker custom';
     el.dataset.color = cs.id;
-    el.style.width = '64px';
-    el.style.height = '64px';
-    el.style.borderRadius = '50%';
-    el.style.cursor = 'grab';
-    el.style.touchAction = 'none';
-    el.style.position = 'relative';
     el.style.background = cs.color;
     const lbl = document.createElement('span');
     lbl.className = 'sticker-label';
@@ -854,14 +917,26 @@ function renderCustomPaletteStickers() {
     el.appendChild(lbl);
     paletteEl.insertBefore(el, addBtn);
     bindPaletteDrag(el);
-    el.addEventListener('dblclick', () => openPopup(cs.id));
+    bindEditTrigger(el);
   });
 }
 
-// Double-click on built-in stickers to edit label/color
-document.querySelectorAll('.palette .sticker[data-color]').forEach(el => {
+// Long-press or double-click to edit sticker
+function bindEditTrigger(el) {
   el.addEventListener('dblclick', () => openPopup(el.dataset.color));
-});
+  let lpTimer = null;
+  el.addEventListener('pointerdown', (e) => {
+    lpTimer = setTimeout(() => {
+      lpTimer = null;
+      openPopup(el.dataset.color);
+    }, 500);
+  });
+  el.addEventListener('pointermove', () => { if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; } });
+  el.addEventListener('pointerup', () => { if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; } });
+  el.addEventListener('pointercancel', () => { if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; } });
+}
+
+document.querySelectorAll('.palette .sticker[data-color]').forEach(bindEditTrigger);
 
 addBtn.addEventListener('click', () => openPopup(null));
 popupCancel.addEventListener('click', closePopup);
@@ -969,6 +1044,12 @@ function updateSaveLink() {
 }
 
 loadData().then(updateSaveLink);
+
+let resizeTimer;
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(render, 200);
+});
 
 // Register service worker for offline PWA
 if ('serviceWorker' in navigator) {
