@@ -1,0 +1,859 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Achievement Calendar</title>
+<link rel="manifest" href="manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Calendar">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html, body {
+    height: 100%;
+    overflow: hidden;
+  }
+  body {
+    font-family: 'SF Mono', 'Menlo', 'Monaco', 'Courier New', monospace;
+    background: #fff;
+    display: flex;
+    flex-direction: column;
+    color: #000;
+  }
+
+  .calendar {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    flex: 1;
+    width: 100vw;
+    border-top: none;
+    border-left: none;
+  }
+
+  .day-header {
+    border-right: 1px solid #000;
+    padding: 4px 8px;
+    font-size: 9px;
+    font-weight: 400;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: #000;
+    text-align: center;
+  }
+
+  .cell {
+    position: relative;
+    border-right: 1px solid #000;
+    border-bottom: 1px solid #000;
+    overflow: hidden;
+    min-height: 0;
+  }
+  .cell.empty { background: transparent; }
+
+  .cell .date-num {
+    position: absolute;
+    top: 3px;
+    right: 4px;
+    font-size: 13px;
+    color: #000;
+    font-weight: 400;
+    z-index: 1;
+    pointer-events: none;
+  }
+
+  .placed-sticker {
+    position: absolute;
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    cursor: grab;
+    touch-action: none;
+    z-index: 2;
+    transform: translate(-50%, -50%);
+  }
+  .placed-sticker:active { cursor: grabbing; }
+
+  .placed-sticker.yellow { background: #FFD700; }
+  .placed-sticker.green { background: rgb(0, 255, 0); }
+  .placed-sticker.orange { background: #FF8C00; }
+  .placed-sticker.red { background: #FF0000; }
+  .placed-sticker.blue { background: #0080FF; }
+  .placed-sticker.grey { background: #999; }
+
+  .sticker-label {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 7px;
+    font-weight: 400;
+    color: #000;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    pointer-events: none;
+    user-select: none;
+    white-space: nowrap;
+  }
+  .placed-sticker.blue .sticker-label,
+  .placed-sticker.red .sticker-label { color: #fff; }
+  .sticker-icon {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+  }
+
+  .bottom-bar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 14px 24px;
+    z-index: 100;
+    pointer-events: none;
+  }
+  .bottom-bar > * { pointer-events: auto; }
+
+  .month-label {
+    font-size: 13px;
+    font-weight: 400;
+    letter-spacing: 1px;
+    color: #000;
+    cursor: default;
+    user-select: none;
+  }
+
+  .month-nav {
+    font-size: 13px;
+    color: #000;
+    cursor: pointer;
+    padding: 2px 4px;
+    user-select: none;
+  }
+
+  .palette {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    padding: 14px 20px;
+    border-radius: 50px;
+    background: transparent;
+    z-index: 100;
+  }
+  .palette .sticker {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    cursor: grab;
+    touch-action: none;
+    position: relative;
+  }
+  .palette .sticker:active { cursor: grabbing; }
+
+  .palette .sticker.yellow { background: #FFD700; }
+  .palette .sticker.green { background: rgb(0, 255, 0); }
+  .palette .sticker.orange { background: #FF8C00; }
+  .palette .sticker.red { background: #FF0000; }
+  .palette .sticker.blue { background: #0080FF; }
+  .palette .sticker.grey { background: #999; }
+  .palette .sticker .sticker-label { pointer-events: none; }
+  .palette .sticker.blue .sticker-label,
+  .palette .sticker.red .sticker-label { color: #fff; }
+
+  .drag-ghost {
+    position: fixed;
+    pointer-events: none;
+    z-index: 1000;
+    border-radius: 50%;
+    opacity: 0.9;
+    width: 64px;
+    height: 64px;
+  }
+  .drag-ghost.yellow { background: #FFD700; }
+  .drag-ghost.green { background: rgb(0, 255, 0); }
+  .drag-ghost.orange { background: #FF8C00; }
+  .drag-ghost.red { background: #FF0000; }
+  .drag-ghost.blue { background: #0080FF; }
+  .drag-ghost.grey { background: #999; }
+
+  /* Trash bin — appears when dragging a placed sticker */
+  .trash {
+    position: fixed;
+    bottom: 20px;
+    left: 20px;
+    width: 64px;
+    height: 64px;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 200;
+    font-size: 28px;
+    border: 1px solid #000;
+    border-radius: 50%;
+    background: #fff;
+    user-select: none;
+    transition: background 0.1s;
+  }
+  .trash.visible { display: flex; }
+  .trash.hover { background: #000; color: #fff; }
+
+  .save-link {
+    position: fixed;
+    bottom: 14px;
+    left: 14px;
+    font-size: 9px;
+    color: #ccc;
+    cursor: pointer;
+    user-select: none;
+    z-index: 100;
+    transition: color 0.15s;
+  }
+  .save-link:hover { color: #000; }
+  .save-link.linked { color: #0a0; }
+
+  /* Add sticker button */
+  .add-btn {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    border: 1px solid #000;
+    background: #fff;
+    font-size: 24px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #000;
+    flex-shrink: 0;
+  }
+
+  /* Add sticker popup */
+  .add-popup {
+    display: none;
+    position: fixed;
+    bottom: 100px;
+    right: 20px;
+    background: #fff;
+    border: 1px solid #000;
+    padding: 16px;
+    z-index: 300;
+    flex-direction: column;
+    gap: 10px;
+    font-size: 11px;
+  }
+  .add-popup.open { display: flex; }
+  .add-popup label { display: flex; flex-direction: column; gap: 4px; }
+  .add-popup input[type="text"] {
+    font-family: inherit;
+    font-size: 11px;
+    border: 1px solid #000;
+    padding: 4px 6px;
+    outline: none;
+  }
+  .add-popup input[type="color"] {
+    width: 40px;
+    height: 30px;
+    border: 1px solid #000;
+    padding: 0;
+    cursor: pointer;
+    background: none;
+  }
+  .add-popup .popup-row {
+    display: flex;
+    gap: 10px;
+    align-items: flex-end;
+  }
+  .add-popup button {
+    font-family: inherit;
+    font-size: 11px;
+    border: 1px solid #000;
+    background: #000;
+    color: #fff;
+    padding: 5px 12px;
+    cursor: pointer;
+  }
+  .add-popup .cancel-btn {
+    background: #fff;
+    color: #000;
+  }
+  .add-popup .delete-btn {
+    background: #fff;
+    color: #e00;
+    border-color: #e00;
+    margin-left: auto;
+  }
+  .add-popup .delete-btn.hidden { display: none; }
+</style>
+</head>
+<body>
+
+<div class="calendar" id="calendar"></div>
+
+<div class="bottom-bar">
+  <span class="month-nav" id="prev-btn">&larr;</span>
+  <span class="month-label" id="month-label"></span>
+  <span class="month-nav" id="next-btn">&rarr;</span>
+</div>
+
+<div class="palette">
+  <div class="sticker yellow" data-color="yellow"><span class="sticker-label">oko</span></div>
+  <div class="sticker green" data-color="green"><span class="sticker-label">walk</span></div>
+  <div class="sticker orange" data-color="orange"><span class="sticker-label">bench</span></div>
+  <div class="sticker red" data-color="red"><span class="sticker-label">pushups</span></div>
+  <div class="sticker blue" data-color="blue"><span class="sticker-label">squats</span></div>
+  <div class="sticker grey" data-color="grey"><svg class="sticker-icon" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="#fff" stroke-width="1.5"><path d="M4 20h4v-4h4v-4h4v-4h4"/></svg></div>
+  <div class="add-btn" id="add-btn">+</div>
+</div>
+
+<div class="add-popup" id="add-popup">
+  <div class="popup-row">
+    <label>label<input type="text" id="new-label" placeholder="e.g. run" maxlength="10"></label>
+    <label>color<input type="color" id="new-color" value="#FF69B4"></label>
+  </div>
+  <div class="popup-row">
+    <button id="new-save">add</button>
+    <button class="cancel-btn" id="new-cancel">cancel</button>
+    <button class="delete-btn hidden" id="new-delete">delete</button>
+  </div>
+</div>
+
+<div class="trash" id="trash">&times;</div>
+<span class="save-link" id="save-link">link save file</span>
+
+<script>
+const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+const DAYS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+
+let currentYear = new Date().getFullYear();
+let currentMonth = new Date().getMonth();
+let calendarData = {};
+let saveTimeout = null;
+const BUILTIN_LABELS = { yellow: 'oko', green: 'walk', orange: 'bench', red: 'pushups', blue: 'squats', grey: '' };
+const STAIRS_SVG = '<svg class="sticker-icon" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="#fff" stroke-width="1.5"><path d="M4 20h4v-4h4v-4h4v-4h4"/></svg>';
+const trashEl = document.getElementById('trash');
+
+// Custom stickers: [{ id: "custom_1", label: "run", color: "#FF69B4" }, ...]
+let customStickers = [];
+try { customStickers = JSON.parse(localStorage.getItem('customStickers')) || []; } catch { customStickers = []; }
+
+function getLabel(colorId) {
+  if (BUILTIN_LABELS[colorId] !== undefined) return BUILTIN_LABELS[colorId];
+  const cs = customStickers.find(s => s.id === colorId);
+  return cs ? cs.label : '';
+}
+
+function getColor(colorId) {
+  const cs = customStickers.find(s => s.id === colorId);
+  return cs ? cs.color : null;
+}
+
+function isLightColor(hex) {
+  const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
+  return (r*299 + g*587 + b*114) / 1000 > 140;
+}
+
+function saveCustomStickers() {
+  localStorage.setItem('customStickers', JSON.stringify(customStickers));
+}
+
+// --- File handle persistence via IndexedDB ---
+function openDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open('calendarDB', 1);
+    req.onupgradeneeded = () => req.result.createObjectStore('handles');
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function storeHandle(handle) {
+  const db = await openDB();
+  const tx = db.transaction('handles', 'readwrite');
+  tx.objectStore('handles').put(handle, 'saveFile');
+  return new Promise(r => { tx.oncomplete = r; });
+}
+
+async function getHandle() {
+  try {
+    const db = await openDB();
+    const tx = db.transaction('handles', 'readonly');
+    const req = tx.objectStore('handles').get('saveFile');
+    return new Promise(r => { req.onsuccess = () => r(req.result || null); });
+  } catch { return null; }
+}
+
+let fileHandle = null;
+
+async function initFileHandle() {
+  fileHandle = await getHandle();
+  if (fileHandle) {
+    try {
+      const perm = await fileHandle.queryPermission({ mode: 'readwrite' });
+      if (perm !== 'granted') {
+        const req = await fileHandle.requestPermission({ mode: 'readwrite' });
+        if (req !== 'granted') fileHandle = null;
+      }
+    } catch { fileHandle = null; }
+  }
+}
+
+async function pickSaveFile() {
+  try {
+    fileHandle = await window.showSaveFilePicker({
+      suggestedName: 'calendar-data.json',
+      types: [{ description: 'JSON', accept: { 'application/json': ['.json'] } }]
+    });
+    await storeHandle(fileHandle);
+    await writeToFile();
+  } catch {}
+}
+
+async function writeToFile() {
+  if (!fileHandle) return;
+  try {
+    const writable = await fileHandle.createWritable();
+    await writable.write(JSON.stringify(calendarData, null, 2));
+    await writable.close();
+  } catch (e) { console.error('File write failed', e); }
+}
+
+async function readFromFile() {
+  if (!fileHandle) return null;
+  try {
+    const file = await fileHandle.getFile();
+    const text = await file.text();
+    return JSON.parse(text);
+  } catch { return null; }
+}
+
+// --- Data persistence: localStorage + file on disk ---
+async function loadData() {
+  // Try file first, fall back to localStorage
+  await initFileHandle();
+  const fileData = await readFromFile();
+  if (fileData && Object.keys(fileData).length > 0) {
+    calendarData = fileData;
+    localStorage.setItem('calendarData', JSON.stringify(calendarData));
+  } else {
+    try { calendarData = JSON.parse(localStorage.getItem('calendarData')) || {}; }
+    catch { calendarData = {}; }
+  }
+  render();
+}
+
+function scheduleSave() {
+  clearTimeout(saveTimeout);
+  saveTimeout = setTimeout(saveData, 400);
+}
+
+async function saveData() {
+  localStorage.setItem('calendarData', JSON.stringify(calendarData));
+  await writeToFile();
+}
+
+function isOverTrash(x, y) {
+  const r = trashEl.getBoundingClientRect();
+  return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
+}
+
+function render() {
+  const cal = document.getElementById('calendar');
+  cal.innerHTML = '';
+  document.getElementById('month-label').textContent = MONTHS[currentMonth] + ' ' + currentYear;
+
+  DAYS.forEach(d => {
+    const el = document.createElement('div');
+    el.className = 'day-header';
+    el.textContent = d;
+    cal.appendChild(el);
+  });
+
+  const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+  let firstDow = new Date(currentYear, currentMonth, 1).getDay();
+  firstDow = firstDow === 0 ? 6 : firstDow - 1;
+
+  const numRows = Math.ceil((firstDow + daysInMonth) / 7);
+  cal.style.gridTemplateRows = `auto repeat(${numRows}, 1fr)`;
+
+  for (let e = 0; e < firstDow; e++) {
+    const empty = document.createElement('div');
+    empty.className = 'cell empty';
+    cal.appendChild(empty);
+  }
+
+  for (let day = 1; day <= daysInMonth; day++) {
+    const key = `${currentYear}-${String(currentMonth+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+    const cell = document.createElement('div');
+    cell.className = 'cell';
+    cell.dataset.key = key;
+
+    const dn = document.createElement('span');
+    dn.className = 'date-num';
+    dn.textContent = day;
+    cell.appendChild(dn);
+
+    const stickers = calendarData[key] || [];
+    stickers.forEach((st, idx) => {
+      const el = document.createElement('div');
+      el.className = `placed-sticker ${st.color}`;
+      const resolvedColor = getColor(st.color) || BUILTIN_COLORS[st.color];
+      if (resolvedColor) el.style.background = resolvedColor;
+      el.style.left = (st.x * 100) + '%';
+      el.style.top = (st.y * 100) + '%';
+      el.dataset.key = key;
+      el.dataset.idx = idx;
+      el.dataset.color = st.color;
+      if (st.color === 'grey') {
+        el.insertAdjacentHTML('beforeend', STAIRS_SVG);
+      } else {
+        const lbl = document.createElement('span');
+        lbl.className = 'sticker-label';
+        lbl.textContent = getLabel(st.color);
+        if (resolvedColor) lbl.style.color = isLightColor(resolvedColor) ? '#000' : '#fff';
+        el.appendChild(lbl);
+      }
+      el.addEventListener('pointerdown', onPlacedStickerDown);
+      cell.appendChild(el);
+    });
+
+    cal.appendChild(cell);
+  }
+
+  const lastDow = (firstDow + daysInMonth - 1) % 7;
+  for (let e = lastDow + 1; e < 7; e++) {
+    const empty = document.createElement('div');
+    empty.className = 'cell empty';
+    cal.appendChild(empty);
+  }
+}
+
+// --- Drag placed stickers ---
+function onPlacedStickerDown(e) {
+  e.preventDefault();
+  e.stopPropagation();
+  const el = e.currentTarget;
+  const color = el.dataset.color;
+  const srcKey = el.dataset.key;
+  const srcIdx = parseInt(el.dataset.idx);
+  const startX = e.clientX, startY = e.clientY;
+  let dragging = false;
+  let ghost = null;
+
+  const onMove = (ev) => {
+    if (!dragging && (Math.abs(ev.clientX - startX) + Math.abs(ev.clientY - startY)) > 5) {
+      dragging = true;
+      el.style.opacity = '0.3';
+      ghost = document.createElement('div');
+      ghost.className = `drag-ghost ${color}`;
+      const gc = getColor(color);
+      if (gc) ghost.style.background = gc;
+      document.body.appendChild(ghost);
+      trashEl.classList.add('visible');
+    }
+    if (ghost) {
+      ghost.style.left = (ev.clientX - 32) + 'px';
+      ghost.style.top = (ev.clientY - 32) + 'px';
+      if (isOverTrash(ev.clientX, ev.clientY)) {
+        trashEl.classList.add('hover');
+      } else {
+        trashEl.classList.remove('hover');
+      }
+    }
+  };
+
+  const onUp = (ev) => {
+    document.removeEventListener('pointermove', onMove);
+    document.removeEventListener('pointerup', onUp);
+    if (ghost) { ghost.remove(); ghost = null; }
+    el.style.opacity = '';
+
+    const overTrash = isOverTrash(ev.clientX, ev.clientY);
+    trashEl.classList.remove('visible', 'hover');
+
+    if (!dragging) return;
+
+    // Dropped on trash — delete
+    if (overTrash) {
+      calendarData[srcKey].splice(srcIdx, 1);
+      if (calendarData[srcKey].length === 0) delete calendarData[srcKey];
+      scheduleSave();
+      render();
+      return;
+    }
+
+    const under = document.elementFromPoint(ev.clientX, ev.clientY);
+    const cell = under ? under.closest('.cell:not(.empty)') : null;
+
+    if (cell) {
+      const targetKey = cell.dataset.key;
+      const rect = cell.getBoundingClientRect();
+      const x = Math.max(0.1, Math.min(0.9, (ev.clientX - rect.left) / rect.width));
+      const y = Math.max(0.1, Math.min(0.9, (ev.clientY - rect.top) / rect.height));
+
+      calendarData[srcKey].splice(srcIdx, 1);
+      if (calendarData[srcKey].length === 0) delete calendarData[srcKey];
+
+      if (!calendarData[targetKey]) calendarData[targetKey] = [];
+      calendarData[targetKey].push({ color, x, y });
+      scheduleSave();
+      render();
+    }
+  };
+
+  document.addEventListener('pointermove', onMove);
+  document.addEventListener('pointerup', onUp);
+}
+
+// --- Palette drag ---
+function bindPaletteDrag(el) {
+  el.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    const color = el.dataset.color;
+    const startX = e.clientX, startY = e.clientY;
+    let dragging = false;
+    let ghost = null;
+
+    const onMove = (ev) => {
+      if (!dragging && (Math.abs(ev.clientX - startX) + Math.abs(ev.clientY - startY)) > 5) {
+        dragging = true;
+        ghost = document.createElement('div');
+        ghost.className = `drag-ghost ${color}`;
+        const gc = getColor(color);
+        if (gc) ghost.style.background = gc;
+        document.body.appendChild(ghost);
+      }
+      if (ghost) {
+        ghost.style.left = (ev.clientX - 32) + 'px';
+        ghost.style.top = (ev.clientY - 32) + 'px';
+      }
+    };
+
+    const onUp = (ev) => {
+      document.removeEventListener('pointermove', onMove);
+      document.removeEventListener('pointerup', onUp);
+      if (ghost) ghost.remove();
+      if (!dragging) return;
+
+      const under = document.elementFromPoint(ev.clientX, ev.clientY);
+      const cell = under ? under.closest('.cell:not(.empty)') : null;
+
+      if (cell) {
+        const key = cell.dataset.key;
+        const rect = cell.getBoundingClientRect();
+        const x = Math.max(0.1, Math.min(0.9, (ev.clientX - rect.left) / rect.width));
+        const y = Math.max(0.1, Math.min(0.9, (ev.clientY - rect.top) / rect.height));
+
+        if (!calendarData[key]) calendarData[key] = [];
+        calendarData[key].push({ color, x, y });
+        scheduleSave();
+        render();
+      }
+    };
+
+    document.addEventListener('pointermove', onMove);
+    document.addEventListener('pointerup', onUp);
+  });
+}
+
+// Bind built-in palette stickers
+document.querySelectorAll('.palette .sticker').forEach(bindPaletteDrag);
+
+// --- Custom stickers + edit popup ---
+const paletteEl = document.querySelector('.palette');
+const addBtn = document.getElementById('add-btn');
+const addPopup = document.getElementById('add-popup');
+const popupLabel = document.getElementById('new-label');
+const popupColor = document.getElementById('new-color');
+const popupSave = document.getElementById('new-save');
+const popupCancel = document.getElementById('new-cancel');
+const popupDelete = document.getElementById('new-delete');
+
+// Built-in color map for editing built-ins
+const BUILTIN_COLORS = {
+  yellow: '#FFD700', green: '#00FF00', orange: '#FF8C00',
+  red: '#FF0000', blue: '#0080FF', grey: '#999999'
+};
+
+let editingId = null; // null = add mode, string = editing that sticker id
+
+function openPopup(id) {
+  editingId = id;
+  if (id) {
+    // Edit mode
+    const isBuiltin = BUILTIN_COLORS[id] !== undefined;
+    const cs = isBuiltin ? null : customStickers.find(s => s.id === id);
+    popupLabel.value = isBuiltin ? (BUILTIN_LABELS[id] || '') : (cs ? cs.label : '');
+    popupColor.value = isBuiltin ? BUILTIN_COLORS[id] : (cs ? cs.color : '#000000');
+    popupSave.textContent = 'save';
+    popupDelete.classList.toggle('hidden', isBuiltin);
+  } else {
+    // Add mode
+    popupLabel.value = '';
+    popupColor.value = '#FF69B4';
+    popupSave.textContent = 'add';
+    popupDelete.classList.add('hidden');
+  }
+  addPopup.classList.add('open');
+  popupLabel.focus();
+}
+
+function closePopup() {
+  addPopup.classList.remove('open');
+  editingId = null;
+}
+
+function renderCustomPaletteStickers() {
+  paletteEl.querySelectorAll('.sticker.custom').forEach(el => el.remove());
+  customStickers.forEach(cs => {
+    const el = document.createElement('div');
+    el.className = 'sticker custom';
+    el.dataset.color = cs.id;
+    el.style.width = '64px';
+    el.style.height = '64px';
+    el.style.borderRadius = '50%';
+    el.style.cursor = 'grab';
+    el.style.touchAction = 'none';
+    el.style.position = 'relative';
+    el.style.background = cs.color;
+    const lbl = document.createElement('span');
+    lbl.className = 'sticker-label';
+    lbl.style.pointerEvents = 'none';
+    lbl.style.color = isLightColor(cs.color) ? '#000' : '#fff';
+    lbl.textContent = cs.label;
+    el.appendChild(lbl);
+    paletteEl.insertBefore(el, addBtn);
+    bindPaletteDrag(el);
+    el.addEventListener('dblclick', () => openPopup(cs.id));
+  });
+}
+
+// Double-click on built-in stickers to edit label/color
+document.querySelectorAll('.palette .sticker[data-color]').forEach(el => {
+  el.addEventListener('dblclick', () => openPopup(el.dataset.color));
+});
+
+addBtn.addEventListener('click', () => openPopup(null));
+popupCancel.addEventListener('click', closePopup);
+
+popupSave.addEventListener('click', () => {
+  const label = popupLabel.value.trim();
+  const color = popupColor.value;
+  if (!label && editingId === null) return;
+
+  if (editingId === null) {
+    // Add new
+    const id = 'custom_' + Date.now();
+    customStickers.push({ id, label, color });
+  } else if (BUILTIN_COLORS[editingId] !== undefined) {
+    // Edit built-in: update label and color
+    BUILTIN_LABELS[editingId] = label;
+    BUILTIN_COLORS[editingId] = color;
+    // Update the DOM sticker
+    const el = paletteEl.querySelector(`.sticker[data-color="${editingId}"]`);
+    if (el) {
+      el.style.background = color;
+      const lbl = el.querySelector('.sticker-label');
+      if (lbl) {
+        lbl.textContent = label;
+        lbl.style.color = isLightColor(color) ? '#000' : '#fff';
+      }
+    }
+    // Update CSS classes won't work for inline, so we set inline bg
+    // Also update placed stickers
+    render();
+  } else {
+    // Edit custom
+    const cs = customStickers.find(s => s.id === editingId);
+    if (cs) { cs.label = label; cs.color = color; }
+  }
+
+  saveCustomStickers();
+  // Save built-in overrides
+  localStorage.setItem('builtinLabels', JSON.stringify(BUILTIN_LABELS));
+  localStorage.setItem('builtinColors', JSON.stringify(BUILTIN_COLORS));
+  renderCustomPaletteStickers();
+  closePopup();
+  render();
+});
+
+popupDelete.addEventListener('click', () => {
+  if (editingId && BUILTIN_COLORS[editingId] === undefined) {
+    customStickers = customStickers.filter(s => s.id !== editingId);
+    saveCustomStickers();
+    renderCustomPaletteStickers();
+  }
+  closePopup();
+});
+
+// Load built-in overrides
+try {
+  const bl = JSON.parse(localStorage.getItem('builtinLabels'));
+  if (bl) Object.assign(BUILTIN_LABELS, bl);
+  const bc = JSON.parse(localStorage.getItem('builtinColors'));
+  if (bc) {
+    Object.assign(BUILTIN_COLORS, bc);
+    // Apply to palette DOM
+    Object.entries(bc).forEach(([id, col]) => {
+      const el = paletteEl.querySelector(`.sticker[data-color="${id}"]`);
+      if (el) {
+        el.style.background = col;
+        const lbl = el.querySelector('.sticker-label');
+        if (lbl) {
+          lbl.textContent = BUILTIN_LABELS[id] || '';
+          lbl.style.color = isLightColor(col) ? '#000' : '#fff';
+        }
+      }
+    });
+  }
+} catch {}
+
+renderCustomPaletteStickers();
+
+// --- Month navigation ---
+document.getElementById('prev-btn').addEventListener('click', () => {
+  currentMonth--;
+  if (currentMonth < 0) { currentMonth = 11; currentYear--; }
+  render();
+});
+document.getElementById('next-btn').addEventListener('click', () => {
+  currentMonth++;
+  if (currentMonth > 11) { currentMonth = 0; currentYear++; }
+  render();
+});
+
+const saveLinkEl = document.getElementById('save-link');
+saveLinkEl.addEventListener('click', async () => {
+  await pickSaveFile();
+  updateSaveLink();
+});
+
+function updateSaveLink() {
+  if (fileHandle) {
+    saveLinkEl.textContent = 'saved to file';
+    saveLinkEl.classList.add('linked');
+  } else {
+    saveLinkEl.textContent = 'link save file';
+    saveLinkEl.classList.remove('linked');
+  }
+}
+
+loadData().then(updateSaveLink);
+
+// Register service worker for offline PWA
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+}
+</script>
+</body>
+</html>
