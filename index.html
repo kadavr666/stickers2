@@ -421,7 +421,13 @@
     }
 
     .save-link {
-      display: none;
+      position: static;
+      display: block;
+      width: 100%;
+      text-align: center;
+      order: 99;
+      font-size: 8px;
+      padding-top: 6px;
     }
 
     .add-popup {
@@ -452,6 +458,7 @@
   <div class="sticker blue" data-color="blue"><span class="sticker-label">squats</span></div>
   <div class="sticker grey" data-color="grey"><svg class="sticker-icon" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="#fff" stroke-width="1.5"><path d="M4 20h4v-4h4v-4h4v-4h4"/></svg></div>
   <div class="add-btn" id="add-btn">+</div>
+  <span class="save-link" id="save-link">link github</span>
 </div>
 
 <div class="add-popup" id="add-popup">
@@ -467,7 +474,6 @@
 </div>
 
 <div class="trash" id="trash">&times;</div>
-<span class="save-link" id="save-link">link save file</span>
 
 <script>
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
@@ -505,86 +511,70 @@ function saveCustomStickers() {
   localStorage.setItem('customStickers', JSON.stringify(customStickers));
 }
 
-// --- File handle persistence via IndexedDB ---
-function openDB() {
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.open('calendarDB', 1);
-    req.onupgradeneeded = () => req.result.createObjectStore('handles');
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-  });
-}
+// --- GitHub Gist persistence ---
+let gistToken = localStorage.getItem('gistToken') || '';
+let gistId = localStorage.getItem('gistId') || '';
 
-async function storeHandle(handle) {
-  const db = await openDB();
-  const tx = db.transaction('handles', 'readwrite');
-  tx.objectStore('handles').put(handle, 'saveFile');
-  return new Promise(r => { tx.oncomplete = r; });
-}
-
-async function getHandle() {
+async function gistRead() {
+  if (!gistToken || !gistId) return null;
   try {
-    const db = await openDB();
-    const tx = db.transaction('handles', 'readonly');
-    const req = tx.objectStore('handles').get('saveFile');
-    return new Promise(r => { req.onsuccess = () => r(req.result || null); });
-  } catch { return null; }
-}
-
-let fileHandle = null;
-
-async function initFileHandle() {
-  fileHandle = await getHandle();
-  if (fileHandle) {
-    try {
-      const perm = await fileHandle.queryPermission({ mode: 'readwrite' });
-      if (perm !== 'granted') {
-        const req = await fileHandle.requestPermission({ mode: 'readwrite' });
-        if (req !== 'granted') fileHandle = null;
-      }
-    } catch { fileHandle = null; }
-  }
-}
-
-async function pickSaveFile() {
-  try {
-    fileHandle = await window.showSaveFilePicker({
-      suggestedName: 'calendar-data.json',
-      types: [{ description: 'JSON', accept: { 'application/json': ['.json'] } }]
+    const res = await fetch(`https://api.github.com/gists/${gistId}`, {
+      headers: { Authorization: `token ${gistToken}` }
     });
-    await storeHandle(fileHandle);
-    await writeToFile();
-  } catch {}
-}
-
-async function writeToFile() {
-  if (!fileHandle) return;
-  try {
-    const writable = await fileHandle.createWritable();
-    await writable.write(JSON.stringify(calendarData, null, 2));
-    await writable.close();
-  } catch (e) { console.error('File write failed', e); }
-}
-
-async function readFromFile() {
-  if (!fileHandle) return null;
-  try {
-    const file = await fileHandle.getFile();
-    const text = await file.text();
-    return JSON.parse(text);
+    if (!res.ok) return null;
+    const gist = await res.json();
+    const file = gist.files['calendar-data.json'];
+    return file ? JSON.parse(file.content) : null;
   } catch { return null; }
+}
+
+async function gistWrite() {
+  if (!gistToken) return;
+  try {
+    const body = {
+      description: 'Achievement Calendar data',
+      files: { 'calendar-data.json': { content: JSON.stringify(calendarData, null, 2) } }
+    };
+    if (gistId) {
+      await fetch(`https://api.github.com/gists/${gistId}`, {
+        method: 'PATCH',
+        headers: { Authorization: `token ${gistToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+    } else {
+      body.public = false;
+      const res = await fetch('https://api.github.com/gists', {
+        method: 'POST',
+        headers: { Authorization: `token ${gistToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      if (res.ok) {
+        const gist = await res.json();
+        gistId = gist.id;
+        localStorage.setItem('gistId', gistId);
+      }
+    }
+  } catch (e) { console.error('Gist write failed', e); }
+}
+
+function setupGistToken() {
+  const token = prompt('Paste your GitHub token (gist scope):');
+  if (token && token.trim()) {
+    gistToken = token.trim();
+    localStorage.setItem('gistToken', gistToken);
+    gistWrite().then(updateSaveLink);
+  }
 }
 
 // --- Seed data (one-time import) ---
 const SEED_DATA = {"2026-04-13":[{"color":"yellow","x":0.377,"y":0.343},{"color":"green","x":0.504,"y":0.442},{"color":"orange","x":0.282,"y":0.7},{"color":"red","x":0.675,"y":0.692}],"2026-04-14":[{"color":"yellow","x":0.277,"y":0.297},{"color":"green","x":0.583,"y":0.369}],"2026-04-15":[{"color":"yellow","x":0.288,"y":0.306},{"color":"green","x":0.577,"y":0.326},{"color":"orange","x":0.416,"y":0.655},{"color":"red","x":0.691,"y":0.688}],"2026-04-16":[{"color":"yellow","x":0.208,"y":0.357},{"color":"green","x":0.47,"y":0.347}],"2026-04-17":[{"color":"yellow","x":0.262,"y":0.337},{"color":"green","x":0.542,"y":0.382},{"color":"orange","x":0.288,"y":0.709},{"color":"red","x":0.515,"y":0.649}],"2026-04-20":[{"color":"yellow","x":0.261,"y":0.229},{"color":"orange","x":0.369,"y":0.626},{"color":"green","x":0.431,"y":0.245},{"color":"red","x":0.773,"y":0.346},{"color":"blue","x":0.653,"y":0.686}],"2026-04-21":[{"color":"yellow","x":0.322,"y":0.253},{"color":"green","x":0.578,"y":0.294},{"color":"red","x":0.524,"y":0.605},{"color":"orange","x":0.25,"y":0.582}],"2026-04-12":[{"color":"yellow","x":0.272,"y":0.283},{"color":"green","x":0.277,"y":0.666}],"2026-04-11":[{"color":"yellow","x":0.194,"y":0.26},{"color":"green","x":0.215,"y":0.646}],"2026-04-10":[{"color":"yellow","x":0.171,"y":0.248},{"color":"green","x":0.187,"y":0.637}],"2026-04-09":[{"color":"yellow","x":0.249,"y":0.28},{"color":"green","x":0.235,"y":0.633}],"2026-04-07":[{"color":"yellow","x":0.18,"y":0.277},{"color":"green","x":0.247,"y":0.628}],"2026-04-06":[{"color":"yellow","x":0.206,"y":0.284},{"color":"green","x":0.251,"y":0.631}],"2026-04-08":[{"color":"yellow","x":0.199,"y":0.224},{"color":"green","x":0.207,"y":0.589}],"2026-04-03":[{"color":"yellow","x":0.297,"y":0.259},{"color":"green","x":0.283,"y":0.609}],"2026-04-04":[{"color":"yellow","x":0.245,"y":0.28},{"color":"green","x":0.243,"y":0.601}],"2026-04-05":[{"color":"yellow","x":0.288,"y":0.296},{"color":"green","x":0.283,"y":0.652}],"2026-04-01":[{"color":"yellow","x":0.274,"y":0.258},{"color":"green","x":0.239,"y":0.598}],"2026-04-02":[{"color":"yellow","x":0.254,"y":0.263},{"color":"green","x":0.277,"y":0.604}]};
 
-// --- Data persistence: localStorage + file on disk ---
+// --- Data persistence: localStorage + GitHub Gist ---
 async function loadData() {
-  // Try file first, fall back to localStorage, then seed
-  await initFileHandle();
-  const fileData = await readFromFile();
-  if (fileData && Object.keys(fileData).length > 0) {
-    calendarData = fileData;
+  // Try gist first, fall back to localStorage, then seed
+  const gistData = await gistRead();
+  if (gistData && Object.keys(gistData).length > 0) {
+    calendarData = gistData;
     localStorage.setItem('calendarData', JSON.stringify(calendarData));
   } else {
     try { calendarData = JSON.parse(localStorage.getItem('calendarData')) || {}; }
@@ -605,7 +595,7 @@ function scheduleSave() {
 
 async function saveData() {
   localStorage.setItem('calendarData', JSON.stringify(calendarData));
-  await writeToFile();
+  await gistWrite();
 }
 
 function ghostOffset() { return window.innerWidth <= 600 ? 18 : 32; }
@@ -1028,17 +1018,14 @@ document.getElementById('next-btn').addEventListener('click', () => {
 });
 
 const saveLinkEl = document.getElementById('save-link');
-saveLinkEl.addEventListener('click', async () => {
-  await pickSaveFile();
-  updateSaveLink();
-});
+saveLinkEl.addEventListener('click', setupGistToken);
 
 function updateSaveLink() {
-  if (fileHandle) {
-    saveLinkEl.textContent = 'saved to file';
+  if (gistToken) {
+    saveLinkEl.textContent = gistId ? 'synced to gist' : 'syncing...';
     saveLinkEl.classList.add('linked');
   } else {
-    saveLinkEl.textContent = 'link save file';
+    saveLinkEl.textContent = 'link github';
     saveLinkEl.classList.remove('linked');
   }
 }
