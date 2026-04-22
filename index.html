@@ -15,6 +15,8 @@
   html, body {
     height: 100%;
     overflow: hidden;
+    overscroll-behavior: none;
+    -webkit-overflow-scrolling: touch;
   }
   body {
     font-family: 'SF Mono', 'Menlo', 'Monaco', 'Courier New', monospace;
@@ -294,6 +296,111 @@
     margin-left: auto;
   }
   .add-popup .delete-btn.hidden { display: none; }
+
+  /* --- Mobile --- */
+  @media (max-width: 600px) {
+    html, body {
+      overflow: auto;
+    }
+
+    .calendar {
+      flex: none;
+      width: 100vw;
+      min-height: 0;
+    }
+
+    .cell {
+      min-height: 14vw;
+    }
+
+    .cell .date-num {
+      font-size: 10px;
+    }
+
+    .placed-sticker {
+      width: 36px;
+      height: 36px;
+    }
+
+    .sticker-label {
+      font-size: 5px;
+    }
+
+    .sticker-icon {
+      width: 16px;
+      height: 16px;
+    }
+
+    .drag-ghost {
+      width: 36px;
+      height: 36px;
+    }
+
+    .bottom-bar {
+      position: fixed;
+      bottom: 0;
+      padding: 8px 16px;
+      background: #fff;
+      z-index: 100;
+    }
+
+    .month-label {
+      font-size: 11px;
+    }
+
+    .month-nav {
+      font-size: 11px;
+      padding: 8px 12px;
+    }
+
+    .palette {
+      position: fixed;
+      bottom: 36px;
+      left: 0;
+      right: 0;
+      justify-content: center;
+      padding: 8px 10px;
+      gap: 6px;
+      border-radius: 0;
+    }
+
+    .palette .sticker {
+      width: 40px;
+      height: 40px;
+    }
+
+    .add-btn {
+      width: 40px;
+      height: 40px;
+      font-size: 18px;
+    }
+
+    .trash {
+      width: 40px;
+      height: 40px;
+      font-size: 20px;
+      bottom: 90px;
+      left: 50%;
+      transform: translateX(-50%);
+    }
+
+    .save-link {
+      bottom: 4px;
+      left: 50%;
+      transform: translateX(-50%);
+    }
+
+    .add-popup {
+      bottom: auto;
+      top: 50%;
+      left: 50%;
+      right: auto;
+      transform: translate(-50%, -50%);
+    }
+
+    /* extra bottom padding so palette doesn't cover last row */
+    .calendar { padding-bottom: 100px; }
+  }
 </style>
 </head>
 <body>
@@ -470,6 +577,8 @@ async function saveData() {
   await writeToFile();
 }
 
+function ghostOffset() { return window.innerWidth <= 600 ? 18 : 32; }
+
 function isOverTrash(x, y) {
   const r = trashEl.getBoundingClientRect();
   return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
@@ -492,7 +601,10 @@ function render() {
   firstDow = firstDow === 0 ? 6 : firstDow - 1;
 
   const numRows = Math.ceil((firstDow + daysInMonth) / 7);
-  cal.style.gridTemplateRows = `auto repeat(${numRows}, 1fr)`;
+  const isMobile = window.innerWidth <= 600;
+  cal.style.gridTemplateRows = isMobile
+    ? `auto repeat(${numRows}, 14vw)`
+    : `auto repeat(${numRows}, 1fr)`;
 
   for (let e = 0; e < firstDow; e++) {
     const empty = document.createElement('div');
@@ -570,8 +682,8 @@ function onPlacedStickerDown(e) {
       trashEl.classList.add('visible');
     }
     if (ghost) {
-      ghost.style.left = (ev.clientX - 32) + 'px';
-      ghost.style.top = (ev.clientY - 32) + 'px';
+      ghost.style.left = (ev.clientX - ghostOffset()) + 'px';
+      ghost.style.top = (ev.clientY - ghostOffset()) + 'px';
       if (isOverTrash(ev.clientX, ev.clientY)) {
         trashEl.classList.add('hover');
       } else {
@@ -642,8 +754,8 @@ function bindPaletteDrag(el) {
         document.body.appendChild(ghost);
       }
       if (ghost) {
-        ghost.style.left = (ev.clientX - 32) + 'px';
-        ghost.style.top = (ev.clientY - 32) + 'px';
+        ghost.style.left = (ev.clientX - ghostOffset()) + 'px';
+        ghost.style.top = (ev.clientY - ghostOffset()) + 'px';
       }
     };
 
