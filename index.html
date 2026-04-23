@@ -470,7 +470,7 @@
   <div class="sticker blue" data-color="blue"><span class="sticker-label">squats</span></div>
   <div class="sticker grey" data-color="grey"><svg class="sticker-icon" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="#fff" stroke-width="1.5"><path d="M4 20h4v-4h4v-4h4v-4h4"/></svg></div>
   <div class="add-btn" id="add-btn">+</div>
-  <span class="save-link" id="save-link">link github</span>
+  <span class="save-link" id="save-link">synced</span>
 </div>
 
 <div class="add-popup" id="add-popup">
@@ -523,9 +523,17 @@ function saveCustomStickers() {
   localStorage.setItem('customStickers', JSON.stringify(customStickers));
 }
 
-// --- GitHub Gist persistence ---
-let gistToken = localStorage.getItem('gistToken') || '';
-let gistId = localStorage.getItem('gistId') || '';
+// --- Supabase persistence ---
+const SUPABASE_URL = 'https://gxnpguknqejhurrxocwm.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imd4bnBndWtucWVqaHVycnhvY3dtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY5NDIyNjgsImV4cCI6MjA5MjUxODI2OH0.gttvjv9ofqHyU3mdc4gunWTbeJilrm-dizdaK9-ze8k';
+const SYNC_ID = 'default';
+
+const sbHeaders = {
+  apikey: SUPABASE_KEY,
+  Authorization: `Bearer ${SUPABASE_KEY}`,
+  'Content-Type': 'application/json',
+  Prefer: 'return=representation'
+};
 
 function buildSyncData() {
   return {
@@ -552,7 +560,6 @@ function applySyncData(data) {
   if (data.builtinColors) {
     Object.assign(BUILTIN_COLORS, data.builtinColors);
     localStorage.setItem('builtinColors', JSON.stringify(BUILTIN_COLORS));
-    // Update palette DOM
     Object.entries(BUILTIN_COLORS).forEach(([id, col]) => {
       const el = paletteEl.querySelector(`.sticker[data-color="${id}"]`);
       if (el) {
@@ -568,111 +575,36 @@ function applySyncData(data) {
   renderCustomPaletteStickers();
 }
 
-async function gistRead() {
-  if (!gistToken || !gistId) return null;
+async function cloudRead() {
   try {
-    const res = await fetch(`https://api.github.com/gists/${gistId}`, {
-      headers: { Authorization: `token ${gistToken}` }
-    });
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/calendar_sync?id=eq.${SYNC_ID}&select=data`,
+      { headers: sbHeaders }
+    );
     if (!res.ok) return null;
-    const gist = await res.json();
-    const file = gist.files['calendar-data.json'];
-    if (!file) return null;
-    const parsed = JSON.parse(file.content);
-    // Support both old format (plain calendar data) and new format (with sync data)
-    if (parsed.calendarData) return parsed;
-    return { calendarData: parsed };
+    const rows = await res.json();
+    return rows.length ? rows[0].data : null;
   } catch { return null; }
 }
 
-async function gistWrite() {
-  if (!gistToken) return;
+async function cloudWrite() {
   try {
-    const body = {
-      description: 'Achievement Calendar data',
-      files: { 'calendar-data.json': { content: JSON.stringify(buildSyncData(), null, 2) } }
-    };
-    if (gistId) {
-      await fetch(`https://api.github.com/gists/${gistId}`, {
-        method: 'PATCH',
-        headers: { Authorization: `token ${gistToken}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
-      });
-    } else {
-      body.public = false;
-      const res = await fetch('https://api.github.com/gists', {
-        method: 'POST',
-        headers: { Authorization: `token ${gistToken}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
-      });
-      if (res.ok) {
-        const gist = await res.json();
-        gistId = gist.id;
-        localStorage.setItem('gistId', gistId);
-      }
-    }
-  } catch (e) { console.error('Gist write failed', e); }
-}
-
-async function findExistingGist() {
-  if (!gistToken) return null;
-  try {
-    const res = await fetch('https://api.github.com/gists?per_page=100', {
-      headers: { Authorization: `token ${gistToken}` }
+    await fetch(`${SUPABASE_URL}/rest/v1/calendar_sync`, {
+      method: 'POST',
+      headers: { ...sbHeaders, Prefer: 'resolution=merge-duplicates,return=representation' },
+      body: JSON.stringify({ id: SYNC_ID, data: buildSyncData(), updated_at: new Date().toISOString() })
     });
-    if (!res.ok) return null;
-    const gists = await res.json();
-    const match = gists.find(g => g.files['calendar-data.json']);
-    return match ? match.id : null;
-  } catch { return null; }
-}
-
-async function setupGistToken() {
-  const token = prompt('Paste your GitHub token (gist scope):');
-  if (token && token.trim()) {
-    gistToken = token.trim();
-    localStorage.setItem('gistToken', gistToken);
-    // Find existing calendar gist before creating a new one
-    const existingId = await findExistingGist();
-    if (existingId) {
-      gistId = existingId;
-      localStorage.setItem('gistId', gistId);
-      // Load data from existing gist
-      const gistData = await gistRead();
-      if (gistData && gistData.calendarData && Object.keys(gistData.calendarData).length > 0) {
-        applySyncData(gistData);
-        render();
-      }
-    } else {
-      await gistWrite();
-    }
-    updateSaveLink();
-  }
+  } catch (e) { console.error('Cloud write failed', e); }
 }
 
 // --- Seed data (one-time import) ---
 const SEED_DATA = {"2026-04-13":[{"color":"yellow","x":0.377,"y":0.343},{"color":"green","x":0.504,"y":0.442},{"color":"orange","x":0.282,"y":0.7},{"color":"red","x":0.675,"y":0.692}],"2026-04-14":[{"color":"yellow","x":0.277,"y":0.297},{"color":"green","x":0.583,"y":0.369}],"2026-04-15":[{"color":"yellow","x":0.288,"y":0.306},{"color":"green","x":0.577,"y":0.326},{"color":"orange","x":0.416,"y":0.655},{"color":"red","x":0.691,"y":0.688}],"2026-04-16":[{"color":"yellow","x":0.208,"y":0.357},{"color":"green","x":0.47,"y":0.347}],"2026-04-17":[{"color":"yellow","x":0.262,"y":0.337},{"color":"green","x":0.542,"y":0.382},{"color":"orange","x":0.288,"y":0.709},{"color":"red","x":0.515,"y":0.649}],"2026-04-20":[{"color":"yellow","x":0.261,"y":0.229},{"color":"orange","x":0.369,"y":0.626},{"color":"green","x":0.431,"y":0.245},{"color":"red","x":0.773,"y":0.346},{"color":"blue","x":0.653,"y":0.686}],"2026-04-21":[{"color":"yellow","x":0.322,"y":0.253},{"color":"green","x":0.578,"y":0.294},{"color":"red","x":0.524,"y":0.605},{"color":"orange","x":0.25,"y":0.582}],"2026-04-12":[{"color":"yellow","x":0.272,"y":0.283},{"color":"green","x":0.277,"y":0.666}],"2026-04-11":[{"color":"yellow","x":0.194,"y":0.26},{"color":"green","x":0.215,"y":0.646}],"2026-04-10":[{"color":"yellow","x":0.171,"y":0.248},{"color":"green","x":0.187,"y":0.637}],"2026-04-09":[{"color":"yellow","x":0.249,"y":0.28},{"color":"green","x":0.235,"y":0.633}],"2026-04-07":[{"color":"yellow","x":0.18,"y":0.277},{"color":"green","x":0.247,"y":0.628}],"2026-04-06":[{"color":"yellow","x":0.206,"y":0.284},{"color":"green","x":0.251,"y":0.631}],"2026-04-08":[{"color":"yellow","x":0.199,"y":0.224},{"color":"green","x":0.207,"y":0.589}],"2026-04-03":[{"color":"yellow","x":0.297,"y":0.259},{"color":"green","x":0.283,"y":0.609}],"2026-04-04":[{"color":"yellow","x":0.245,"y":0.28},{"color":"green","x":0.243,"y":0.601}],"2026-04-05":[{"color":"yellow","x":0.288,"y":0.296},{"color":"green","x":0.283,"y":0.652}],"2026-04-01":[{"color":"yellow","x":0.274,"y":0.258},{"color":"green","x":0.239,"y":0.598}],"2026-04-02":[{"color":"yellow","x":0.254,"y":0.263},{"color":"green","x":0.277,"y":0.604}]};
 
-// --- Data persistence: localStorage + GitHub Gist ---
+// --- Data persistence: localStorage + Supabase ---
 async function loadData() {
-  // Always find the correct gist on load
-  if (gistToken) {
-    const found = await findExistingGist();
-    if (found && found !== gistId) { gistId = found; localStorage.setItem('gistId', gistId); }
-    if (!gistId && !found) { /* will create on first save */ }
-  }
-  // Try gist first, fall back to localStorage, then seed
-  const gistData = await gistRead();
-  if (gistData && gistData.calendarData && Object.keys(gistData.calendarData).length > 0) {
-    applySyncData(gistData);
-    // Upgrade old format gist: if no customStickers key, re-save with full data
-    if (!gistData.customStickers) {
-      // Load local custom stickers / built-in overrides if any
-      try { const cs = JSON.parse(localStorage.getItem('customStickers')); if (cs && cs.length) customStickers = cs; } catch {}
-      try { const bl = JSON.parse(localStorage.getItem('builtinLabels')); if (bl) Object.assign(BUILTIN_LABELS, bl); } catch {}
-      try { const bc = JSON.parse(localStorage.getItem('builtinColors')); if (bc) Object.assign(BUILTIN_COLORS, bc); } catch {}
-      await gistWrite();
-    }
+  const cloudData = await cloudRead();
+  if (cloudData && cloudData.calendarData && Object.keys(cloudData.calendarData).length > 0) {
+    applySyncData(cloudData);
   } else {
     try { calendarData = JSON.parse(localStorage.getItem('calendarData')) || {}; }
     catch { calendarData = {}; }
@@ -681,6 +613,7 @@ async function loadData() {
   if (Object.keys(calendarData).length === 0) {
     calendarData = SEED_DATA;
     localStorage.setItem('calendarData', JSON.stringify(calendarData));
+    await cloudWrite();
   }
   render();
 }
@@ -692,7 +625,7 @@ function scheduleSave() {
 
 async function saveData() {
   localStorage.setItem('calendarData', JSON.stringify(calendarData));
-  await gistWrite();
+  await cloudWrite();
 }
 
 function ghostOffset() { return window.innerWidth <= 600 ? 18 : 32; }
@@ -1131,29 +1064,23 @@ document.getElementById('next-btn').addEventListener('click', () => {
 });
 
 const saveLinkEl = document.getElementById('save-link');
-saveLinkEl.addEventListener('click', setupGistToken);
+saveLinkEl.style.cursor = 'default';
 
 function updateSaveLink() {
-  if (gistToken) {
-    saveLinkEl.textContent = gistId ? 'synced to gist' : 'syncing...';
-    saveLinkEl.classList.add('linked');
-  } else {
-    saveLinkEl.textContent = 'link github';
-    saveLinkEl.classList.remove('linked');
-  }
+  saveLinkEl.textContent = 'synced';
+  saveLinkEl.classList.add('linked');
 }
 
 loadData().then(updateSaveLink);
 
-// Auto-sync from gist every 30 seconds
+// Auto-sync from cloud every 15 seconds
 setInterval(async () => {
-  if (!gistToken || !gistId) return;
-  const gistData = await gistRead();
-  if (gistData && JSON.stringify(gistData) !== JSON.stringify(buildSyncData())) {
-    applySyncData(gistData);
+  const cloudData = await cloudRead();
+  if (cloudData && JSON.stringify(cloudData) !== JSON.stringify(buildSyncData())) {
+    applySyncData(cloudData);
     render();
   }
-}, 30000);
+}, 15000);
 
 let resizeTimer;
 window.addEventListener('resize', () => {
