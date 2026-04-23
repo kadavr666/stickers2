@@ -252,6 +252,70 @@
   .save-link:hover { color: #000; }
   .save-link.linked { color: #0a0; }
 
+  /* Auth screen */
+  .auth-screen {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: #fff;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .auth-screen.hidden { display: none; }
+  .auth-box {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    width: 260px;
+    font-family: inherit;
+    font-size: 11px;
+  }
+  .auth-box h2 {
+    font-size: 13px;
+    font-weight: 400;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    text-align: center;
+    margin-bottom: 4px;
+  }
+  .auth-box input {
+    font-family: inherit;
+    font-size: 11px;
+    border: 1px solid #000;
+    padding: 8px 10px;
+    outline: none;
+  }
+  .auth-box button {
+    font-family: inherit;
+    font-size: 11px;
+    border: 1px solid #000;
+    background: #000;
+    color: #fff;
+    padding: 8px 12px;
+    cursor: pointer;
+  }
+  .auth-box .switch-btn {
+    background: #fff;
+    color: #000;
+    border: none;
+    font-size: 9px;
+    text-decoration: underline;
+    cursor: pointer;
+    text-align: center;
+  }
+  .auth-box .auth-error {
+    color: #e00;
+    font-size: 9px;
+    text-align: center;
+    min-height: 14px;
+  }
+  .user-info {
+    font-size: 8px;
+    color: #999;
+    cursor: pointer;
+  }
+
   /* Add sticker button */
   .add-btn {
     width: 64px;
@@ -481,6 +545,17 @@
 </head>
 <body>
 
+<div class="auth-screen" id="auth-screen">
+  <div class="auth-box">
+    <h2 id="auth-title">log in</h2>
+    <input type="email" id="auth-email" placeholder="email">
+    <input type="password" id="auth-password" placeholder="password">
+    <button id="auth-submit">log in</button>
+    <button class="switch-btn" id="auth-switch">don't have an account? sign up</button>
+    <div class="auth-error" id="auth-error"></div>
+  </div>
+</div>
+
 <div class="calendar" id="calendar"></div>
 
 <div class="bottom-bar">
@@ -497,7 +572,7 @@
   <div class="sticker blue" data-color="blue"><span class="sticker-label">squats</span></div>
   <div class="sticker grey" data-color="grey"><svg class="sticker-icon" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="#fff" stroke-width="1.5"><path d="M4 20h4v-4h4v-4h4v-4h4"/></svg></div>
   <div class="add-btn" id="add-btn">+</div>
-  <span class="save-link" id="save-link">synced</span>
+  <span class="save-link" id="save-link"></span>
 </div>
 
 <div class="popup-overlay" id="popup-overlay"></div>
@@ -554,14 +629,122 @@ function saveCustomStickers() {
 // --- Supabase persistence ---
 const SUPABASE_URL = 'https://gxnpguknqejhurrxocwm.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imd4bnBndWtucWVqaHVycnhvY3dtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY5NDIyNjgsImV4cCI6MjA5MjUxODI2OH0.gttvjv9ofqHyU3mdc4gunWTbeJilrm-dizdaK9-ze8k';
-const SYNC_ID = 'default';
 
-const sbHeaders = {
-  apikey: SUPABASE_KEY,
-  Authorization: `Bearer ${SUPABASE_KEY}`,
-  'Content-Type': 'application/json',
-  Prefer: 'return=representation'
-};
+let authToken = null;
+let currentUser = null;
+
+function sbHeaders() {
+  return {
+    apikey: SUPABASE_KEY,
+    Authorization: `Bearer ${authToken || SUPABASE_KEY}`,
+    'Content-Type': 'application/json',
+    Prefer: 'return=representation'
+  };
+}
+
+// --- Auth ---
+const authScreen = document.getElementById('auth-screen');
+const authEmail = document.getElementById('auth-email');
+const authPassword = document.getElementById('auth-password');
+const authSubmit = document.getElementById('auth-submit');
+const authSwitch = document.getElementById('auth-switch');
+const authError = document.getElementById('auth-error');
+const authTitle = document.getElementById('auth-title');
+let isSignUp = false;
+
+authSwitch.addEventListener('click', () => {
+  isSignUp = !isSignUp;
+  authTitle.textContent = isSignUp ? 'sign up' : 'log in';
+  authSubmit.textContent = isSignUp ? 'sign up' : 'log in';
+  authSwitch.textContent = isSignUp ? 'already have an account? log in' : "don't have an account? sign up";
+  authError.textContent = '';
+});
+
+authSubmit.addEventListener('click', async () => {
+  const email = authEmail.value.trim();
+  const password = authPassword.value;
+  if (!email || !password) { authError.textContent = 'fill in both fields'; return; }
+  authError.textContent = '';
+  authSubmit.disabled = true;
+
+  const endpoint = isSignUp ? 'signup' : 'token?grant_type=password';
+  try {
+    const res = await fetch(`${SUPABASE_URL}/auth/v1/${endpoint}`, {
+      method: 'POST',
+      headers: { apikey: SUPABASE_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password })
+    });
+    const data = await res.json();
+    if (!res.ok) { authError.textContent = data.error_description || data.msg || 'error'; authSubmit.disabled = false; return; }
+
+    if (isSignUp && !data.access_token) {
+      authError.textContent = 'check your email to confirm';
+      authSubmit.disabled = false;
+      return;
+    }
+
+    authToken = data.access_token;
+    currentUser = data.user;
+    localStorage.setItem('supabase_token', data.access_token);
+    localStorage.setItem('supabase_refresh', data.refresh_token);
+    localStorage.setItem('supabase_user', JSON.stringify(data.user));
+    onLoggedIn();
+  } catch (e) {
+    authError.textContent = 'network error';
+    authSubmit.disabled = false;
+  }
+});
+
+async function refreshToken() {
+  const refresh = localStorage.getItem('supabase_refresh');
+  if (!refresh) return false;
+  try {
+    const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, {
+      method: 'POST',
+      headers: { apikey: SUPABASE_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh_token: refresh })
+    });
+    if (!res.ok) return false;
+    const data = await res.json();
+    authToken = data.access_token;
+    currentUser = data.user;
+    localStorage.setItem('supabase_token', data.access_token);
+    localStorage.setItem('supabase_refresh', data.refresh_token);
+    localStorage.setItem('supabase_user', JSON.stringify(data.user));
+    return true;
+  } catch { return false; }
+}
+
+function logout() {
+  authToken = null;
+  currentUser = null;
+  localStorage.removeItem('supabase_token');
+  localStorage.removeItem('supabase_refresh');
+  localStorage.removeItem('supabase_user');
+  authScreen.classList.remove('hidden');
+  authSubmit.disabled = false;
+  authEmail.value = '';
+  authPassword.value = '';
+  authError.textContent = '';
+}
+
+async function tryAutoLogin() {
+  const token = localStorage.getItem('supabase_token');
+  const user = localStorage.getItem('supabase_user');
+  if (token && user) {
+    authToken = token;
+    currentUser = JSON.parse(user);
+    // Verify token is still valid by refreshing
+    const ok = await refreshToken();
+    if (ok) { onLoggedIn(); return; }
+  }
+  authScreen.classList.remove('hidden');
+}
+
+function onLoggedIn() {
+  authScreen.classList.add('hidden');
+  loadData().then(updateSaveLink);
+}
 
 function buildSyncData() {
   return {
@@ -604,10 +787,11 @@ function applySyncData(data) {
 }
 
 async function cloudRead() {
+  if (!currentUser) return null;
   try {
     const res = await fetch(
-      `${SUPABASE_URL}/rest/v1/calendar_sync?id=eq.${SYNC_ID}&select=data`,
-      { headers: sbHeaders }
+      `${SUPABASE_URL}/rest/v1/calendar_sync?user_id=eq.${currentUser.id}&select=data`,
+      { headers: sbHeaders() }
     );
     if (!res.ok) return null;
     const rows = await res.json();
@@ -616,11 +800,12 @@ async function cloudRead() {
 }
 
 async function cloudWrite() {
+  if (!currentUser) return;
   try {
     await fetch(`${SUPABASE_URL}/rest/v1/calendar_sync`, {
       method: 'POST',
-      headers: { ...sbHeaders, Prefer: 'resolution=merge-duplicates,return=representation' },
-      body: JSON.stringify({ id: SYNC_ID, data: buildSyncData(), updated_at: new Date().toISOString() })
+      headers: { ...sbHeaders(), Prefer: 'resolution=merge-duplicates,return=representation' },
+      body: JSON.stringify({ id: currentUser.id, user_id: currentUser.id, data: buildSyncData(), updated_at: new Date().toISOString() })
     });
   } catch (e) { console.error('Cloud write failed', e); }
 }
@@ -1129,17 +1314,21 @@ document.getElementById('next-btn').addEventListener('click', () => {
 });
 
 const saveLinkEl = document.getElementById('save-link');
-saveLinkEl.style.cursor = 'default';
 
 function updateSaveLink() {
-  saveLinkEl.textContent = 'synced';
-  saveLinkEl.classList.add('linked');
+  if (currentUser) {
+    saveLinkEl.textContent = currentUser.email;
+    saveLinkEl.classList.add('linked');
+    saveLinkEl.style.cursor = 'pointer';
+    saveLinkEl.onclick = () => { if (confirm('log out?')) logout(); };
+  }
 }
 
-loadData().then(updateSaveLink);
+tryAutoLogin();
 
 // Auto-sync from cloud every 15 seconds
 setInterval(async () => {
+  if (!currentUser) return;
   const cloudData = await cloudRead();
   if (cloudData && JSON.stringify(cloudData) !== JSON.stringify(buildSyncData())) {
     applySyncData(cloudData);
