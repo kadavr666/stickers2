@@ -956,7 +956,8 @@ function closePopup() {
 popupOverlay.addEventListener('click', closePopup);
 
 function renderCustomPaletteStickers() {
-  paletteEl.querySelectorAll('.sticker.custom').forEach(el => el.remove());
+  // Remove from both palette and sticker-row
+  document.querySelectorAll('.sticker.custom').forEach(el => el.remove());
   customStickers.forEach(cs => {
     const el = document.createElement('div');
     el.className = 'sticker custom';
@@ -968,7 +969,8 @@ function renderCustomPaletteStickers() {
     lbl.style.color = isLightColor(cs.color) ? '#000' : '#fff';
     lbl.textContent = cs.label;
     el.appendChild(lbl);
-    paletteEl.insertBefore(el, addBtn);
+    // Insert before addBtn in whatever container it's in (palette or sticker-row)
+    addBtn.parentNode.insertBefore(el, addBtn);
     bindPaletteDrag(el);
     bindEditTrigger(el);
   });
