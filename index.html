@@ -610,6 +610,12 @@ const SEED_DATA = {"2026-04-13":[{"color":"yellow","x":0.377,"y":0.343},{"color"
 
 // --- Data persistence: localStorage + GitHub Gist ---
 async function loadData() {
+  // Always find the correct gist on load
+  if (gistToken) {
+    const found = await findExistingGist();
+    if (found && found !== gistId) { gistId = found; localStorage.setItem('gistId', gistId); }
+    if (!gistId && !found) { /* will create on first save */ }
+  }
   // Try gist first, fall back to localStorage, then seed
   const gistData = await gistRead();
   if (gistData && Object.keys(gistData).length > 0) {
