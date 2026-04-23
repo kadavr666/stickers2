@@ -90,6 +90,21 @@
     transform: translate(-50%, -50%);
   }
   .placed-sticker:active { cursor: grabbing; }
+  .placed-sticker.pop {
+    animation: popIn 0.2s ease-out;
+  }
+  @keyframes popIn {
+    0% { transform: translate(-50%, -50%) scale(0.5); }
+    60% { transform: translate(-50%, -50%) scale(1.15); }
+    100% { transform: translate(-50%, -50%) scale(1); }
+  }
+  .drag-ghost.pickup {
+    animation: pickUp 0.15s ease-out;
+  }
+  @keyframes pickUp {
+    0% { transform: scale(1); }
+    100% { transform: scale(1.1); }
+  }
 
   .placed-sticker.yellow { background: #FFD700; }
   .placed-sticker.green { background: rgb(0, 255, 0); }
@@ -641,7 +656,26 @@ async function saveData() {
   await cloudWrite();
 }
 
-function ghostOffset() { return window.innerWidth <= 600 ? 18 : 32; }
+function ghostOffset() { return window.innerWidth <= 600 ? 22 : 32; }
+
+// Audio feedback
+let audioCtx = null;
+function playClick(freq, dur) {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = 'sine';
+  osc.frequency.value = freq;
+  gain.gain.setValueAtTime(0.08, audioCtx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + dur);
+  osc.connect(gain);
+  gain.connect(audioCtx.destination);
+  osc.start();
+  osc.stop(audioCtx.currentTime + dur);
+}
+function playPickup() { playClick(800, 0.06); }
+function playDrop() { playClick(1200, 0.08); }
+function playTrash() { playClick(300, 0.12); }
 
 function isOverTrash(x, y) {
   const r = trashEl.getBoundingClientRect();
@@ -792,11 +826,12 @@ function onPlacedStickerDown(e) {
       dragging = true;
       el.style.opacity = '0.3';
       ghost = document.createElement('div');
-      ghost.className = `drag-ghost ${color}`;
+      ghost.className = `drag-ghost pickup ${color}`;
       const gc = getColor(color);
       if (gc) ghost.style.background = gc;
       document.body.appendChild(ghost);
       trashEl.classList.add('visible');
+      playPickup();
     }
     if (ghost) {
       ghost.style.left = (ev.clientX - ghostOffset()) + 'px';
@@ -824,6 +859,7 @@ function onPlacedStickerDown(e) {
     if (overTrash) {
       calendarData[srcKey].splice(srcIdx, 1);
       if (calendarData[srcKey].length === 0) delete calendarData[srcKey];
+      playTrash();
       scheduleSave();
       render();
       return;
@@ -843,8 +879,11 @@ function onPlacedStickerDown(e) {
 
       if (!calendarData[targetKey]) calendarData[targetKey] = [];
       calendarData[targetKey].push({ color, x, y });
+      playDrop();
       scheduleSave();
       render();
+      const newCell = document.querySelector(`.cell[data-key="${targetKey}"]`);
+      if (newCell) { const p = newCell.querySelector('.placed-sticker:last-child'); if (p) p.classList.add('pop'); }
     }
   };
 
@@ -865,10 +904,11 @@ function bindPaletteDrag(el) {
       if (!dragging && (Math.abs(ev.clientX - startX) + Math.abs(ev.clientY - startY)) > 5) {
         dragging = true;
         ghost = document.createElement('div');
-        ghost.className = `drag-ghost ${color}`;
+        ghost.className = `drag-ghost pickup ${color}`;
         const gc = getColor(color);
         if (gc) ghost.style.background = gc;
         document.body.appendChild(ghost);
+        playPickup();
       }
       if (ghost) {
         ghost.style.left = (ev.clientX - ghostOffset()) + 'px';
@@ -893,8 +933,11 @@ function bindPaletteDrag(el) {
 
         if (!calendarData[key]) calendarData[key] = [];
         calendarData[key].push({ color, x, y });
+        playDrop();
         scheduleSave();
         render();
+        const newCell = document.querySelector(`.cell[data-key="${key}"]`);
+        if (newCell) { const p = newCell.querySelector('.placed-sticker:last-child'); if (p) p.classList.add('pop'); }
       }
     };
 
