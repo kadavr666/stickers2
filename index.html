@@ -526,6 +526,47 @@ function saveCustomStickers() {
 let gistToken = localStorage.getItem('gistToken') || '';
 let gistId = localStorage.getItem('gistId') || '';
 
+function buildSyncData() {
+  return {
+    calendarData,
+    customStickers,
+    builtinLabels: BUILTIN_LABELS,
+    builtinColors: BUILTIN_COLORS
+  };
+}
+
+function applySyncData(data) {
+  if (data.calendarData) {
+    calendarData = data.calendarData;
+    localStorage.setItem('calendarData', JSON.stringify(calendarData));
+  }
+  if (data.customStickers) {
+    customStickers = data.customStickers;
+    saveCustomStickers();
+  }
+  if (data.builtinLabels) {
+    Object.assign(BUILTIN_LABELS, data.builtinLabels);
+    localStorage.setItem('builtinLabels', JSON.stringify(BUILTIN_LABELS));
+  }
+  if (data.builtinColors) {
+    Object.assign(BUILTIN_COLORS, data.builtinColors);
+    localStorage.setItem('builtinColors', JSON.stringify(BUILTIN_COLORS));
+    // Update palette DOM
+    Object.entries(BUILTIN_COLORS).forEach(([id, col]) => {
+      const el = paletteEl.querySelector(`.sticker[data-color="${id}"]`);
+      if (el) {
+        el.style.background = col;
+        const lbl = el.querySelector('.sticker-label');
+        if (lbl) {
+          lbl.textContent = BUILTIN_LABELS[id] || '';
+          lbl.style.color = isLightColor(col) ? '#000' : '#fff';
+        }
+      }
+    });
+  }
+  renderCustomPaletteStickers();
+}
+
 async function gistRead() {
   if (!gistToken || !gistId) return null;
   try {
@@ -535,7 +576,11 @@ async function gistRead() {
     if (!res.ok) return null;
     const gist = await res.json();
     const file = gist.files['calendar-data.json'];
-    return file ? JSON.parse(file.content) : null;
+    if (!file) return null;
+    const parsed = JSON.parse(file.content);
+    // Support both old format (plain calendar data) and new format (with sync data)
+    if (parsed.calendarData) return parsed;
+    return { calendarData: parsed };
   } catch { return null; }
 }
 
@@ -544,7 +589,7 @@ async function gistWrite() {
   try {
     const body = {
       description: 'Achievement Calendar data',
-      files: { 'calendar-data.json': { content: JSON.stringify(calendarData, null, 2) } }
+      files: { 'calendar-data.json': { content: JSON.stringify(buildSyncData(), null, 2) } }
     };
     if (gistId) {
       await fetch(`https://api.github.com/gists/${gistId}`, {
@@ -593,9 +638,8 @@ async function setupGistToken() {
       localStorage.setItem('gistId', gistId);
       // Load data from existing gist
       const gistData = await gistRead();
-      if (gistData && Object.keys(gistData).length > 0) {
-        calendarData = gistData;
-        localStorage.setItem('calendarData', JSON.stringify(calendarData));
+      if (gistData && gistData.calendarData && Object.keys(gistData.calendarData).length > 0) {
+        applySyncData(gistData);
         render();
       }
     } else {
@@ -618,9 +662,8 @@ async function loadData() {
   }
   // Try gist first, fall back to localStorage, then seed
   const gistData = await gistRead();
-  if (gistData && Object.keys(gistData).length > 0) {
-    calendarData = gistData;
-    localStorage.setItem('calendarData', JSON.stringify(calendarData));
+  if (gistData && gistData.calendarData && Object.keys(gistData.calendarData).length > 0) {
+    applySyncData(gistData);
   } else {
     try { calendarData = JSON.parse(localStorage.getItem('calendarData')) || {}; }
     catch { calendarData = {}; }
@@ -1096,9 +1139,8 @@ loadData().then(updateSaveLink);
 setInterval(async () => {
   if (!gistToken || !gistId) return;
   const gistData = await gistRead();
-  if (gistData && JSON.stringify(gistData) !== JSON.stringify(calendarData)) {
-    calendarData = gistData;
-    localStorage.setItem('calendarData', JSON.stringify(calendarData));
+  if (gistData && JSON.stringify(gistData) !== JSON.stringify(buildSyncData())) {
+    applySyncData(gistData);
     render();
   }
 }, 30000);
