@@ -976,8 +976,9 @@ document.querySelectorAll('.palette .sticker[data-color]').forEach(bindEditTrigg
 addBtn.addEventListener('click', (e) => { e.stopPropagation(); openPopup(null); });
 addBtn.addEventListener('pointerdown', (e) => { e.stopPropagation(); });
 popupCancel.addEventListener('click', closePopup);
+popupCancel.addEventListener('touchend', (e) => { e.preventDefault(); closePopup(); });
 
-popupSave.addEventListener('click', () => {
+function handlePopupSave() {
   const label = popupLabel.value.trim();
   const color = popupColor.value;
   if (!label && editingId === null) return;
@@ -1016,7 +1017,10 @@ popupSave.addEventListener('click', () => {
   renderCustomPaletteStickers();
   closePopup();
   render();
-});
+  scheduleSave();
+}
+popupSave.addEventListener('click', handlePopupSave);
+popupSave.addEventListener('touchend', (e) => { e.preventDefault(); handlePopupSave(); });
 
 popupDelete.addEventListener('click', () => {
   if (editingId && BUILTIN_COLORS[editingId] === undefined) {
