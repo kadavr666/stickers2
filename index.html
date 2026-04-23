@@ -568,12 +568,40 @@ async function gistWrite() {
   } catch (e) { console.error('Gist write failed', e); }
 }
 
-function setupGistToken() {
+async function findExistingGist() {
+  if (!gistToken) return null;
+  try {
+    const res = await fetch('https://api.github.com/gists?per_page=100', {
+      headers: { Authorization: `token ${gistToken}` }
+    });
+    if (!res.ok) return null;
+    const gists = await res.json();
+    const match = gists.find(g => g.files['calendar-data.json']);
+    return match ? match.id : null;
+  } catch { return null; }
+}
+
+async function setupGistToken() {
   const token = prompt('Paste your GitHub token (gist scope):');
   if (token && token.trim()) {
     gistToken = token.trim();
     localStorage.setItem('gistToken', gistToken);
-    gistWrite().then(updateSaveLink);
+    // Find existing calendar gist before creating a new one
+    const existingId = await findExistingGist();
+    if (existingId) {
+      gistId = existingId;
+      localStorage.setItem('gistId', gistId);
+      // Load data from existing gist
+      const gistData = await gistRead();
+      if (gistData && Object.keys(gistData).length > 0) {
+        calendarData = gistData;
+        localStorage.setItem('calendarData', JSON.stringify(calendarData));
+        render();
+      }
+    } else {
+      await gistWrite();
+    }
+    updateSaveLink();
   }
 }
 
