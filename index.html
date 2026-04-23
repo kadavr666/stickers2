@@ -664,6 +664,14 @@ async function loadData() {
   const gistData = await gistRead();
   if (gistData && gistData.calendarData && Object.keys(gistData.calendarData).length > 0) {
     applySyncData(gistData);
+    // Upgrade old format gist: if no customStickers key, re-save with full data
+    if (!gistData.customStickers) {
+      // Load local custom stickers / built-in overrides if any
+      try { const cs = JSON.parse(localStorage.getItem('customStickers')); if (cs && cs.length) customStickers = cs; } catch {}
+      try { const bl = JSON.parse(localStorage.getItem('builtinLabels')); if (bl) Object.assign(BUILTIN_LABELS, bl); } catch {}
+      try { const bc = JSON.parse(localStorage.getItem('builtinColors')); if (bc) Object.assign(BUILTIN_COLORS, bc); } catch {}
+      await gistWrite();
+    }
   } else {
     try { calendarData = JSON.parse(localStorage.getItem('calendarData')) || {}; }
     catch { calendarData = {}; }
