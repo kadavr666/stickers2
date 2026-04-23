@@ -1086,6 +1086,17 @@ function updateSaveLink() {
 
 loadData().then(updateSaveLink);
 
+// Auto-sync from gist every 30 seconds
+setInterval(async () => {
+  if (!gistToken || !gistId) return;
+  const gistData = await gistRead();
+  if (gistData && JSON.stringify(gistData) !== JSON.stringify(calendarData)) {
+    calendarData = gistData;
+    localStorage.setItem('calendarData', JSON.stringify(calendarData));
+    render();
+  }
+}, 30000);
+
 let resizeTimer;
 window.addEventListener('resize', () => {
   clearTimeout(resizeTimer);
