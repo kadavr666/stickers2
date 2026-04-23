@@ -447,6 +447,7 @@
       left: 50%;
       right: auto;
       transform: translate(-50%, -50%);
+      z-index: 400;
     }
   }
 </style>
@@ -1039,7 +1040,8 @@ function bindEditTrigger(el) {
 
 document.querySelectorAll('.palette .sticker[data-color]').forEach(bindEditTrigger);
 
-addBtn.addEventListener('click', () => openPopup(null));
+addBtn.addEventListener('click', (e) => { e.stopPropagation(); openPopup(null); });
+addBtn.addEventListener('pointerdown', (e) => { e.stopPropagation(); });
 popupCancel.addEventListener('click', closePopup);
 
 popupSave.addEventListener('click', () => {
