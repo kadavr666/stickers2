@@ -93,8 +93,8 @@
 
   .placed-sticker {
     position: absolute;
-    width: 64px;
-    height: 64px;
+    width: 48px;
+    height: 48px;
     border-radius: 50%;
     cursor: grab;
     touch-action: none;
@@ -199,8 +199,8 @@
     z-index: 100;
   }
   .palette .sticker {
-    width: 64px;
-    height: 64px;
+    width: 48px;
+    height: 48px;
     border-radius: 50%;
     cursor: grab;
     touch-action: none;
@@ -224,8 +224,8 @@
     z-index: 1000;
     border-radius: 50%;
     opacity: 0.9;
-    width: 64px;
-    height: 64px;
+    width: 48px;
+    height: 48px;
   }
   .drag-ghost.yellow { background: #FFD700; }
   .drag-ghost.green { background: rgb(0, 255, 0); }
@@ -335,8 +335,8 @@
 
   /* Add sticker button */
   .add-btn {
-    width: 64px;
-    height: 64px;
+    width: 48px;
+    height: 48px;
     border-radius: 50%;
     border: 1px solid #000;
     background: #fff;
@@ -425,14 +425,14 @@
       flex: none;
       width: 100vw;
       min-height: 0;
-      grid-template-columns: repeat(2, 1fr);
+      grid-template-columns: 1fr;
       padding-bottom: 200px;
     }
 
     .day-header { display: none; }
 
     .cell {
-      min-height: 40vw;
+      min-height: 100vw;
     }
 
     .cell .date-num {
@@ -880,8 +880,7 @@ function render() {
   firstDow = firstDow === 0 ? 6 : firstDow - 1;
 
   if (isMobile) {
-    const numRows = Math.ceil(daysInMonth / 2);
-    cal.style.gridTemplateRows = `repeat(${numRows}, 40vw)`;
+    cal.style.gridTemplateRows = `repeat(${daysInMonth}, 100vw)`;
   } else {
     DAYS.forEach(d => {
       const el = document.createElement('div');
@@ -1064,9 +1063,25 @@ function bindPaletteDrag(el) {
     const startX = e.clientX, startY = e.clientY;
     let dragging = false;
     let ghost = null;
+    let holdReady = false;
+    let cancelled = false;
+
+    // On mobile, wait 150ms before allowing drag so horizontal swipes scroll
+    const isMobile = window.innerWidth <= 600;
+    const holdTimer = isMobile ? setTimeout(() => { holdReady = true; }, 150) : null;
+    if (!isMobile) holdReady = true;
 
     const onMove = (ev) => {
-      if (!dragging && (Math.abs(ev.clientX - startX) + Math.abs(ev.clientY - startY)) > 5) {
+      if (cancelled) return;
+      // If on mobile and moved horizontally before hold, cancel drag (let scroll happen)
+      if (!holdReady && Math.abs(ev.clientX - startX) > 5) {
+        cancelled = true;
+        clearTimeout(holdTimer);
+        document.removeEventListener('pointermove', onMove);
+        document.removeEventListener('pointerup', onUp);
+        return;
+      }
+      if (!dragging && holdReady && (Math.abs(ev.clientX - startX) + Math.abs(ev.clientY - startY)) > 5) {
         dragging = true;
         ghost = document.createElement('div');
         ghost.className = `drag-ghost pickup ${color}`;
@@ -1082,6 +1097,7 @@ function bindPaletteDrag(el) {
     };
 
     const onUp = (ev) => {
+      clearTimeout(holdTimer);
       document.removeEventListener('pointermove', onMove);
       document.removeEventListener('pointerup', onUp);
       if (ghost) ghost.remove();
