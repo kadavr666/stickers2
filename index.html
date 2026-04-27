@@ -207,6 +207,10 @@
     position: relative;
   }
   .palette .sticker:active { cursor: grabbing; }
+  .palette .sticker.selected {
+    outline: 3px solid #000;
+    outline-offset: 3px;
+  }
 
   .palette .sticker.yellow { background: #FFD700; }
   .palette .sticker.green { background: rgb(0, 255, 0); }
@@ -426,13 +430,15 @@
       width: 100vw;
       min-height: 0;
       grid-template-columns: 1fr;
+      grid-auto-rows: 120px;
       padding-bottom: 200px;
     }
 
     .day-header { display: none; }
 
     .cell {
-      min-height: 100vw;
+      min-height: 120px;
+      height: 120px;
     }
 
     .cell .date-num {
@@ -484,6 +490,7 @@
       width: 54px;
       height: 54px;
       flex-shrink: 0;
+      touch-action: auto;
     }
 
     .add-btn {
@@ -880,7 +887,7 @@ function render() {
   firstDow = firstDow === 0 ? 6 : firstDow - 1;
 
   if (isMobile) {
-    cal.style.gridTemplateRows = `repeat(${daysInMonth}, 100vw)`;
+    cal.style.gridTemplateRows = `repeat(${daysInMonth}, 120px)`;
   } else {
     DAYS.forEach(d => {
       const el = document.createElement('div');
@@ -959,6 +966,23 @@ function render() {
       }
       el.addEventListener('pointerdown', onPlacedStickerDown);
       cell.appendChild(el);
+    });
+
+    // Mobile tap-to-place: if a palette sticker is selected, tap cell to place
+    cell.addEventListener('pointerup', (e) => {
+      if (!selectedPaletteColor) return;
+      if (e.target.closest('.placed-sticker') || e.target.closest('.steps')) return;
+      const rect = cell.getBoundingClientRect();
+      const x = Math.max(0.1, Math.min(0.9, (e.clientX - rect.left) / rect.width));
+      const y = Math.max(0.1, Math.min(0.9, (e.clientY - rect.top) / rect.height));
+      const key = cell.dataset.key;
+      if (!calendarData[key]) calendarData[key] = [];
+      calendarData[key].push({ color: selectedPaletteColor, x, y });
+      playDrop();
+      scheduleSave();
+      render();
+      const newCell = document.querySelector(`.cell[data-key="${key}"]`);
+      if (newCell) { const p = newCell.querySelector('.placed-sticker:last-child'); if (p) p.classList.add('pop'); }
     });
 
     cal.appendChild(cell);
@@ -1056,32 +1080,40 @@ function onPlacedStickerDown(e) {
   document.addEventListener('pointerup', onUp);
 }
 
-// --- Palette drag ---
+// --- Palette: tap-to-select on mobile, drag on desktop ---
+let selectedPaletteColor = null;
+
+function clearPaletteSelection() {
+  selectedPaletteColor = null;
+  document.querySelectorAll('.palette .sticker.selected').forEach(s => s.classList.remove('selected'));
+}
+
 function bindPaletteDrag(el) {
   el.addEventListener('pointerdown', (e) => {
+    const isMobile = window.innerWidth <= 600;
+    if (isMobile) {
+      // On mobile: tap to select/deselect
+      e.stopPropagation();
+      const color = el.dataset.color;
+      if (selectedPaletteColor === color) {
+        clearPaletteSelection();
+      } else {
+        clearPaletteSelection();
+        selectedPaletteColor = color;
+        el.classList.add('selected');
+        playPickup();
+      }
+      return;
+    }
+
+    // Desktop: drag as before
     const color = el.dataset.color;
     const startX = e.clientX, startY = e.clientY;
     let dragging = false;
     let ghost = null;
-    let holdReady = false;
-    let cancelled = false;
-
-    // On mobile, wait 150ms before allowing drag so horizontal swipes scroll
-    const isMobile = window.innerWidth <= 600;
-    const holdTimer = isMobile ? setTimeout(() => { holdReady = true; }, 150) : null;
-    if (!isMobile) holdReady = true;
 
     const onMove = (ev) => {
-      if (cancelled) return;
-      // If on mobile and moved horizontally before hold, cancel drag (let scroll happen)
-      if (!holdReady && Math.abs(ev.clientX - startX) > 5) {
-        cancelled = true;
-        clearTimeout(holdTimer);
-        document.removeEventListener('pointermove', onMove);
-        document.removeEventListener('pointerup', onUp);
-        return;
-      }
-      if (!dragging && holdReady && (Math.abs(ev.clientX - startX) + Math.abs(ev.clientY - startY)) > 5) {
+      if (!dragging && (Math.abs(ev.clientX - startX) + Math.abs(ev.clientY - startY)) > 5) {
         dragging = true;
         ghost = document.createElement('div');
         ghost.className = `drag-ghost pickup ${color}`;
@@ -1097,7 +1129,6 @@ function bindPaletteDrag(el) {
     };
 
     const onUp = (ev) => {
-      clearTimeout(holdTimer);
       document.removeEventListener('pointermove', onMove);
       document.removeEventListener('pointerup', onUp);
       if (ghost) ghost.remove();
