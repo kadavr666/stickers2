@@ -65,6 +65,18 @@
     z-index: 1;
     pointer-events: none;
   }
+  .cell .steps {
+    position: absolute;
+    bottom: 8px;
+    right: 10px;
+    font-size: 16px;
+    color: #999;
+    cursor: pointer;
+    z-index: 3;
+    user-select: none;
+  }
+  .cell .steps:hover { color: #000; }
+
   .cell .day-name {
     display: none;
     position: absolute;
@@ -137,36 +149,41 @@
     pointer-events: none;
   }
 
-  .bottom-bar {
+  .month-picker {
     position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
+    top: 10px;
+    right: 10px;
     display: flex;
     align-items: center;
-    justify-content: center;
-    gap: 10px;
-    padding: 14px 24px;
+    gap: 6px;
     z-index: 100;
-    pointer-events: none;
-  }
-  .bottom-bar > * { pointer-events: auto; }
-
-  .month-label {
-    font-size: 13px;
-    font-weight: 400;
-    letter-spacing: 1px;
-    color: #000;
-    cursor: default;
-    user-select: none;
-  }
-
-  .month-nav {
-    font-size: 13px;
-    color: #000;
+    background: #fff;
+    border: 1px solid #000;
+    padding: 6px 10px;
     cursor: pointer;
-    padding: 2px 4px;
-    user-select: none;
+  }
+  .month-picker select {
+    font-family: inherit;
+    font-size: 11px;
+    color: #000;
+    border: none;
+    background: transparent;
+    outline: none;
+    cursor: pointer;
+    -webkit-appearance: none;
+    appearance: none;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding-right: 14px;
+  }
+  .month-picker::after {
+    content: '';
+    width: 0;
+    height: 0;
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-top: 5px solid #000;
+    pointer-events: none;
   }
 
   .palette {
@@ -445,68 +462,34 @@
       height: 44px;
     }
 
-    .bottom-bar {
-      display: none;
-    }
-
     .palette {
       position: fixed;
       bottom: 0;
       left: 0;
       right: 0;
-      padding: 10px 12px 16px;
-      gap: 8px;
+      padding: 24px 12px 24px;
+      gap: 10px;
       border-radius: 0;
-      flex-wrap: wrap;
       background: #fff;
       border-top: 1px solid #ccc;
-    }
-
-    .palette .sticker-row {
-      display: flex;
-      width: 100%;
-      gap: 8px;
-      align-items: center;
+      flex-wrap: nowrap;
       overflow-x: auto;
       -webkit-overflow-scrolling: touch;
       scrollbar-width: none;
-      flex-wrap: nowrap;
+      justify-content: flex-start;
     }
-    .palette .sticker-row::-webkit-scrollbar {
-      display: none;
-    }
-
-    .palette .month-row {
-      display: flex;
-      width: 100%;
-      justify-content: center;
-      align-items: center;
-      gap: 8px;
-      order: -1;
-      padding-bottom: 10px;
-      margin-bottom: 10px;
-      border-bottom: 1px solid #ccc;
-    }
-
-    .palette .month-row .month-label {
-      font-size: 11px;
-    }
-
-    .palette .month-row .month-nav {
-      font-size: 11px;
-      padding: 4px 8px;
-    }
+    .palette::-webkit-scrollbar { display: none; }
 
     .palette .sticker {
-      width: 44px;
-      height: 44px;
+      width: 54px;
+      height: 54px;
       flex-shrink: 0;
     }
 
     .add-btn {
-      width: 44px;
-      height: 44px;
-      font-size: 20px;
+      width: 54px;
+      height: 54px;
+      font-size: 22px;
       flex-shrink: 0;
     }
 
@@ -558,10 +541,8 @@
 
 <div class="calendar" id="calendar"></div>
 
-<div class="bottom-bar">
-  <span class="month-nav" id="prev-btn">&larr;</span>
-  <span class="month-label" id="month-label"></span>
-  <span class="month-nav" id="next-btn">&rarr;</span>
+<div class="month-picker" id="month-picker">
+  <select id="month-select"></select>
 </div>
 
 <div class="palette">
@@ -597,6 +578,8 @@ const DAYS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
 let currentYear = new Date().getFullYear();
 let currentMonth = new Date().getMonth();
 let calendarData = {};
+let stepsData = {};
+try { stepsData = JSON.parse(localStorage.getItem('stepsData')) || {}; } catch { stepsData = {}; }
 let saveTimeout = null;
 const BUILTIN_LABELS = { yellow: 'oko', green: 'walk', orange: 'bench', red: 'pushups', blue: 'squats', grey: '' };
 const STAIRS_SVG = '<svg class="sticker-icon" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="#fff" stroke-width="1.5"><path d="M4 20h4v-4h4v-4h4v-4h4"/></svg>';
@@ -749,6 +732,7 @@ function onLoggedIn() {
 function buildSyncData() {
   return {
     calendarData,
+    stepsData,
     customStickers,
     builtinLabels: BUILTIN_LABELS,
     builtinColors: BUILTIN_COLORS
@@ -759,6 +743,10 @@ function applySyncData(data) {
   if (data.calendarData) {
     calendarData = data.calendarData;
     localStorage.setItem('calendarData', JSON.stringify(calendarData));
+  }
+  if (data.stepsData) {
+    stepsData = data.stepsData;
+    localStorage.setItem('stepsData', JSON.stringify(stepsData));
   }
   if (data.customStickers) {
     customStickers = data.customStickers;
@@ -867,54 +855,26 @@ function isOverTrash(x, y) {
   return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
 }
 
+function populateMonthSelect() {
+  const sel = document.getElementById('month-select');
+  sel.innerHTML = '';
+  for (let y = currentYear - 2; y <= currentYear + 2; y++) {
+    for (let m = 0; m < 12; m++) {
+      const opt = document.createElement('option');
+      opt.value = `${y}-${m}`;
+      opt.textContent = (MONTHS[m] + ' ' + y).toUpperCase();
+      if (y === currentYear && m === currentMonth) opt.selected = true;
+      sel.appendChild(opt);
+    }
+  }
+}
+
 function render() {
   const cal = document.getElementById('calendar');
   cal.innerHTML = '';
-  document.getElementById('month-label').textContent = (MONTHS[currentMonth] + ' ' + currentYear).toUpperCase();
+  populateMonthSelect();
 
   const isMobile = window.innerWidth <= 600;
-
-  // On mobile, move month nav into palette
-  const paletteMonthRow = document.querySelector('.palette .month-row');
-  if (isMobile && !paletteMonthRow) {
-    const row = document.createElement('div');
-    row.className = 'month-row';
-    const prevBtn = document.createElement('span');
-    prevBtn.className = 'month-nav';
-    prevBtn.innerHTML = '&larr;';
-    prevBtn.addEventListener('click', () => { currentMonth--; if (currentMonth < 0) { currentMonth = 11; currentYear--; } render(); });
-    const lbl = document.createElement('span');
-    lbl.className = 'month-label';
-    lbl.id = 'palette-month-label';
-    lbl.textContent = (MONTHS[currentMonth] + ' ' + currentYear).toUpperCase();
-    const nextBtn = document.createElement('span');
-    nextBtn.className = 'month-nav';
-    nextBtn.innerHTML = '&rarr;';
-    nextBtn.addEventListener('click', () => { currentMonth++; if (currentMonth > 11) { currentMonth = 0; currentYear++; } render(); });
-    row.appendChild(prevBtn);
-    row.appendChild(lbl);
-    row.appendChild(nextBtn);
-    paletteEl.insertBefore(row, paletteEl.firstChild);
-  } else if (isMobile && paletteMonthRow) {
-    paletteMonthRow.querySelector('.month-label').textContent = (MONTHS[currentMonth] + ' ' + currentYear).toUpperCase();
-  } else if (!isMobile && paletteMonthRow) {
-    paletteMonthRow.remove();
-  }
-
-  // Wrap/unwrap stickers in scrollable row on mobile
-  const existingRow = paletteEl.querySelector('.sticker-row');
-  if (isMobile && !existingRow) {
-    const row = document.createElement('div');
-    row.className = 'sticker-row';
-    const stickers = Array.from(paletteEl.querySelectorAll('.sticker, .add-btn'));
-    stickers.forEach(s => row.appendChild(s));
-    const saveLnk = paletteEl.querySelector('.save-link');
-    paletteEl.insertBefore(row, saveLnk);
-  } else if (!isMobile && existingRow) {
-    const items = Array.from(existingRow.children);
-    items.forEach(s => paletteEl.appendChild(s));
-    existingRow.remove();
-  }
   const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
   let firstDow = new Date(currentYear, currentMonth, 1).getDay();
   firstDow = firstDow === 0 ? 6 : firstDow - 1;
@@ -956,6 +916,27 @@ function render() {
     dayName.className = 'day-name';
     dayName.textContent = DAYS[dow];
     cell.appendChild(dayName);
+
+    // Steps counter
+    const stepsEl = document.createElement('span');
+    stepsEl.className = 'steps';
+    const stepsVal = stepsData[key];
+    stepsEl.textContent = stepsVal ? (stepsVal >= 1000 ? (stepsVal / 1000).toFixed(1).replace(/\.0$/, '') + 'k' : stepsVal) : '0k';
+    stepsEl.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const val = prompt('steps:', stepsVal || '');
+      if (val === null) return;
+      const num = parseInt(val.replace(/\D/g, ''));
+      if (num > 0) {
+        stepsData[key] = num;
+      } else {
+        delete stepsData[key];
+      }
+      localStorage.setItem('stepsData', JSON.stringify(stepsData));
+      scheduleSave();
+      render();
+    });
+    cell.appendChild(stepsEl);
 
     const stickers = calendarData[key] || [];
     stickers.forEach((st, idx) => {
@@ -1079,7 +1060,6 @@ function onPlacedStickerDown(e) {
 // --- Palette drag ---
 function bindPaletteDrag(el) {
   el.addEventListener('pointerdown', (e) => {
-    e.preventDefault();
     const color = el.dataset.color;
     const startX = e.clientX, startY = e.clientY;
     let dragging = false;
@@ -1302,14 +1282,10 @@ try {
 renderCustomPaletteStickers();
 
 // --- Month navigation ---
-document.getElementById('prev-btn').addEventListener('click', () => {
-  currentMonth--;
-  if (currentMonth < 0) { currentMonth = 11; currentYear--; }
-  render();
-});
-document.getElementById('next-btn').addEventListener('click', () => {
-  currentMonth++;
-  if (currentMonth > 11) { currentMonth = 0; currentYear++; }
+document.getElementById('month-select').addEventListener('change', (e) => {
+  const [y, m] = e.target.value.split('-').map(Number);
+  currentYear = y;
+  currentMonth = m;
   render();
 });
 
@@ -1317,7 +1293,7 @@ const saveLinkEl = document.getElementById('save-link');
 
 function updateSaveLink() {
   if (currentUser) {
-    saveLinkEl.textContent = currentUser.email;
+    saveLinkEl.textContent = 'log out';
     saveLinkEl.classList.add('linked');
     saveLinkEl.style.cursor = 'pointer';
     saveLinkEl.onclick = () => { if (confirm('log out?')) logout(); };
