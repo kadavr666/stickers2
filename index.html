@@ -202,14 +202,13 @@
     width: 48px;
     height: 48px;
     border-radius: 50%;
-    cursor: grab;
+    cursor: pointer;
     touch-action: none;
     position: relative;
+    transition: transform 0.15s ease;
   }
-  .palette .sticker:active { cursor: grabbing; }
   .palette .sticker.selected {
-    outline: 3px solid #000;
-    outline-offset: 3px;
+    transform: scale(1.35);
   }
 
   .palette .sticker.yellow { background: #FFD700; }
@@ -968,7 +967,7 @@ function render() {
       cell.appendChild(el);
     });
 
-    // Mobile tap-to-place: if a palette sticker is selected, tap cell to place
+    // Tap-to-place: if a palette sticker is selected, tap cell to place
     cell.addEventListener('pointerup', (e) => {
       if (!selectedPaletteColor) return;
       if (e.target.closest('.placed-sticker') || e.target.closest('.steps')) return;
@@ -1080,7 +1079,7 @@ function onPlacedStickerDown(e) {
   document.addEventListener('pointerup', onUp);
 }
 
-// --- Palette: tap-to-select on mobile, drag on desktop ---
+// --- Palette: tap to select/deselect, then tap cell to place ---
 let selectedPaletteColor = null;
 
 function clearPaletteSelection() {
@@ -1090,71 +1089,16 @@ function clearPaletteSelection() {
 
 function bindPaletteDrag(el) {
   el.addEventListener('pointerdown', (e) => {
-    const isMobile = window.innerWidth <= 600;
-    if (isMobile) {
-      // On mobile: tap to select/deselect
-      e.stopPropagation();
-      const color = el.dataset.color;
-      if (selectedPaletteColor === color) {
-        clearPaletteSelection();
-      } else {
-        clearPaletteSelection();
-        selectedPaletteColor = color;
-        el.classList.add('selected');
-        playPickup();
-      }
-      return;
-    }
-
-    // Desktop: drag as before
+    e.stopPropagation();
     const color = el.dataset.color;
-    const startX = e.clientX, startY = e.clientY;
-    let dragging = false;
-    let ghost = null;
-
-    const onMove = (ev) => {
-      if (!dragging && (Math.abs(ev.clientX - startX) + Math.abs(ev.clientY - startY)) > 5) {
-        dragging = true;
-        ghost = document.createElement('div');
-        ghost.className = `drag-ghost pickup ${color}`;
-        const gc = getColor(color);
-        if (gc) ghost.style.background = gc;
-        document.body.appendChild(ghost);
-        playPickup();
-      }
-      if (ghost) {
-        ghost.style.left = (ev.clientX - ghostOffset()) + 'px';
-        ghost.style.top = (ev.clientY - ghostOffset()) + 'px';
-      }
-    };
-
-    const onUp = (ev) => {
-      document.removeEventListener('pointermove', onMove);
-      document.removeEventListener('pointerup', onUp);
-      if (ghost) ghost.remove();
-      if (!dragging) return;
-
-      const under = document.elementFromPoint(ev.clientX, ev.clientY);
-      const cell = under ? under.closest('.cell:not(.empty)') : null;
-
-      if (cell) {
-        const key = cell.dataset.key;
-        const rect = cell.getBoundingClientRect();
-        const x = Math.max(0.1, Math.min(0.9, (ev.clientX - rect.left) / rect.width));
-        const y = Math.max(0.1, Math.min(0.9, (ev.clientY - rect.top) / rect.height));
-
-        if (!calendarData[key]) calendarData[key] = [];
-        calendarData[key].push({ color, x, y });
-        playDrop();
-        scheduleSave();
-        render();
-        const newCell = document.querySelector(`.cell[data-key="${key}"]`);
-        if (newCell) { const p = newCell.querySelector('.placed-sticker:last-child'); if (p) p.classList.add('pop'); }
-      }
-    };
-
-    document.addEventListener('pointermove', onMove);
-    document.addEventListener('pointerup', onUp);
+    if (selectedPaletteColor === color) {
+      clearPaletteSelection();
+    } else {
+      clearPaletteSelection();
+      selectedPaletteColor = color;
+      el.classList.add('selected');
+      playPickup();
+    }
   });
 }
 
