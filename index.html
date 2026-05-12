@@ -67,27 +67,26 @@
   }
   .cell-plus {
     position: absolute;
-    top: 1px;
-    right: 4px;
-    font-size: 15px;
+    top: 0;
+    right: 0;
+    font-size: 16px;
     color: #ccc;
     cursor: pointer;
     z-index: 3;
     user-select: none;
-    line-height: 1;
+    padding: 4px 7px;
   }
   .cell-plus:hover { color: #000; }
   .tracker-list {
     position: absolute;
     right: 6px;
-    top: 50%;
-    transform: translateY(-50%);
+    top: 28px;
     font-size: 8px;
     color: #888;
     z-index: 1;
     pointer-events: none;
     text-align: right;
-    line-height: 1.6;
+    line-height: 1.8;
     max-width: 65%;
     overflow: hidden;
   }
@@ -451,14 +450,14 @@
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    width: 240px;
+    width: 300px;
+    max-height: 80vh;
+    overflow-y: auto;
     background: #fff;
     border: 1px solid #000;
-    padding: 16px;
     z-index: 400;
     flex-direction: column;
-    gap: 8px;
-    font-size: 11px;
+    font-size: 13px;
   }
   .tracker-popup.open { display: flex; }
   .tracker-popup-title {
@@ -466,56 +465,57 @@
     color: #999;
     text-transform: uppercase;
     letter-spacing: 0.5px;
-    margin-bottom: 2px;
+    padding: 14px 16px 12px;
+    border-bottom: 1px solid #eee;
   }
   .tracker-item {
     display: flex;
     align-items: center;
-    gap: 6px;
+    min-height: 48px;
+    padding: 0 16px;
+    border-bottom: 1px solid #eee;
+    gap: 8px;
   }
   .tracker-item-text {
     flex: 1;
-    font-size: 11px;
+    font-size: 13px;
     word-break: break-word;
   }
   .tracker-item-del {
     font-family: inherit;
-    font-size: 13px;
+    font-size: 20px;
     border: none;
     background: none;
     color: #e00;
     cursor: pointer;
-    padding: 0 2px;
+    padding: 8px 4px;
     line-height: 1;
     flex-shrink: 0;
+    min-width: 36px;
+    text-align: center;
   }
   .tracker-add-row {
     display: flex;
-    gap: 6px;
-    align-items: center;
-    margin-top: 4px;
+    align-items: stretch;
+    border-bottom: 1px solid #eee;
   }
   .tracker-add-row input {
     flex: 1;
     font-family: inherit;
-    font-size: 11px;
-    border: 1px solid #ccc;
-    border-bottom: 1px solid #000;
-    border-top: none;
-    border-left: none;
-    border-right: none;
-    padding: 4px 2px;
+    font-size: 13px;
+    border: none;
+    padding: 14px 16px;
     outline: none;
     background: transparent;
   }
   .tracker-add-row button {
     font-family: inherit;
-    font-size: 16px;
-    border: 1px solid #000;
+    font-size: 22px;
+    border: none;
+    border-left: 1px solid #eee;
     background: #000;
     color: #fff;
-    width: 28px;
-    height: 28px;
+    width: 56px;
     cursor: pointer;
     line-height: 1;
     flex-shrink: 0;
@@ -523,14 +523,16 @@
   .tracker-done-btn {
     font-family: inherit;
     font-size: 11px;
-    border: 1px solid #000;
+    border: none;
     background: #fff;
-    color: #000;
-    padding: 5px 12px;
+    color: #999;
+    padding: 14px 16px;
     cursor: pointer;
-    align-self: flex-start;
-    margin-top: 4px;
+    text-align: left;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
   }
+  .tracker-done-btn:hover { color: #000; }
 
   /* --- Mobile --- */
   @media (max-width: 600px) {
@@ -543,15 +545,15 @@
       width: 100vw;
       min-height: 0;
       grid-template-columns: 1fr;
-      grid-auto-rows: 120px;
+      grid-auto-rows: 240px;
       padding-bottom: 200px;
     }
 
     .day-header { display: none; }
 
     .cell {
-      min-height: 120px;
-      height: 120px;
+      min-height: 240px;
+      height: 240px;
     }
 
     .cell .date-num {
@@ -1015,7 +1017,7 @@ function render() {
   firstDow = firstDow === 0 ? 6 : firstDow - 1;
 
   if (isMobile) {
-    cal.style.gridTemplateRows = `repeat(${daysInMonth}, 120px)`;
+    cal.style.gridTemplateRows = `repeat(${daysInMonth}, 240px)`;
   } else {
     DAYS.forEach(d => {
       const el = document.createElement('div');
