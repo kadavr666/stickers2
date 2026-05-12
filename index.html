@@ -275,8 +275,8 @@
   /* Trash bin — appears when dragging a placed sticker */
   .trash {
     position: fixed;
-    bottom: 20px;
-    left: 20px;
+    left: 0;
+    top: 0;
     width: 64px;
     height: 64px;
     display: none;
@@ -625,9 +625,6 @@
       width: 44px;
       height: 44px;
       font-size: 22px;
-      bottom: 200px;
-      left: 50%;
-      transform: translateX(-50%);
     }
 
     .save-link {
@@ -1200,6 +1197,15 @@ function onPlacedStickerDown(e) {
       const gc = getColor(color);
       if (gc) ghost.style.background = gc;
       document.body.appendChild(ghost);
+      // Position trash 250px below grab point, clamped to viewport
+      const trashSize = window.innerWidth <= 600 ? 44 : 64;
+      let tx = startX - trashSize / 2;
+      let ty = startY + 250 - trashSize / 2;
+      tx = Math.max(8, Math.min(window.innerWidth - trashSize - 8, tx));
+      ty = Math.max(8, Math.min(window.innerHeight - trashSize - 8, ty));
+      trashEl.style.left = tx + 'px';
+      trashEl.style.top = ty + 'px';
+      trashEl.style.transform = 'none';
       trashEl.classList.add('visible');
       playPickup();
     }
