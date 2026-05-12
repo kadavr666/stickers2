@@ -688,6 +688,9 @@
     <label>color<input type="color" id="new-color" value="#FF69B4"></label>
   </div>
   <div class="popup-row">
+    <label>kcal<input type="number" id="new-kcal" placeholder="0" min="0" style="width:70px"></label>
+  </div>
+  <div class="popup-row">
     <button id="new-save">add</button>
     <button class="cancel-btn" id="new-cancel">cancel</button>
     <button class="delete-btn hidden" id="new-delete">delete</button>
@@ -874,7 +877,8 @@ function buildSyncData() {
     trackerData,
     customStickers,
     builtinLabels: BUILTIN_LABELS,
-    builtinColors: BUILTIN_COLORS
+    builtinColors: BUILTIN_COLORS,
+    stickerKcal: STICKER_KCAL
   };
 }
 
@@ -890,6 +894,10 @@ function applySyncData(data) {
   if (data.trackerData) {
     trackerData = data.trackerData;
     localStorage.setItem('trackerData', JSON.stringify(trackerData));
+  }
+  if (data.stickerKcal) {
+    Object.assign(STICKER_KCAL, data.stickerKcal);
+    localStorage.setItem('stickerKcal', JSON.stringify(STICKER_KCAL));
   }
   if (data.customStickers) {
     customStickers = data.customStickers;
@@ -1014,23 +1022,16 @@ function populateMonthSelect() {
 }
 
 const BASE_KCAL = 1745;
-// kcal per sticker, matched by color id or label
-const STICKER_KCAL_BY_COLOR = { grey: 80 }; // stairs = 80 kcal
-const STICKER_KCAL_BY_LABEL = { pingpong: 325 }; // pingpong = 325 kcal/hr
+// kcal per sticker id — edited via the sticker popup, persisted
+let STICKER_KCAL = { grey: 80 }; // stairs default
+try { Object.assign(STICKER_KCAL, JSON.parse(localStorage.getItem('stickerKcal')) || {}); } catch {}
 
 function calcDayKcal(key) {
   const stickers = calendarData[key] || [];
   const steps = stepsData[key] || 0;
   let extra = steps * 0.045; // walk: 0.045 kcal per step
   stickers.forEach(st => {
-    if (STICKER_KCAL_BY_COLOR[st.color] !== undefined) {
-      extra += STICKER_KCAL_BY_COLOR[st.color];
-    } else {
-      const lbl = getLabel(st.color).toLowerCase();
-      if (STICKER_KCAL_BY_LABEL[lbl] !== undefined) {
-        extra += STICKER_KCAL_BY_LABEL[lbl];
-      }
-    }
+    extra += STICKER_KCAL[st.color] || 0;
   });
   return BASE_KCAL + Math.round(extra);
 }
@@ -1303,6 +1304,7 @@ const popupColor = document.getElementById('new-color');
 const popupSave = document.getElementById('new-save');
 const popupCancel = document.getElementById('new-cancel');
 const popupDelete = document.getElementById('new-delete');
+const popupKcal = document.getElementById('new-kcal');
 
 // Built-in color map for editing built-ins
 const BUILTIN_COLORS = {
@@ -1320,12 +1322,14 @@ function openPopup(id) {
     const cs = isBuiltin ? null : customStickers.find(s => s.id === id);
     popupLabel.value = isBuiltin ? (BUILTIN_LABELS[id] || '') : (cs ? cs.label : '');
     popupColor.value = isBuiltin ? BUILTIN_COLORS[id] : (cs ? cs.color : '#000000');
+    popupKcal.value = STICKER_KCAL[id] || '';
     popupSave.textContent = 'save';
     popupDelete.classList.toggle('hidden', isBuiltin);
   } else {
     // Add mode
     popupLabel.value = '';
     popupColor.value = '#FF69B4';
+    popupKcal.value = '';
     popupSave.textContent = 'add';
     popupDelete.classList.add('hidden');
   }
@@ -1388,15 +1392,18 @@ function handlePopupSave() {
   const label = popupLabel.value.trim();
   const color = popupColor.value;
   if (!label && editingId === null) return;
+  const kcalVal = parseInt(popupKcal.value) || 0;
 
   if (editingId === null) {
     // Add new
     const id = 'custom_' + Date.now();
     customStickers.push({ id, label, color });
+    if (kcalVal) STICKER_KCAL[id] = kcalVal;
   } else if (BUILTIN_COLORS[editingId] !== undefined) {
     // Edit built-in: update label and color
     BUILTIN_LABELS[editingId] = label;
     BUILTIN_COLORS[editingId] = color;
+    STICKER_KCAL[editingId] = kcalVal;
     // Update the DOM sticker
     const el = paletteEl.querySelector(`.sticker[data-color="${editingId}"]`);
     if (el) {
@@ -1414,8 +1421,10 @@ function handlePopupSave() {
     // Edit custom
     const cs = customStickers.find(s => s.id === editingId);
     if (cs) { cs.label = label; cs.color = color; }
+    STICKER_KCAL[editingId] = kcalVal;
   }
 
+  localStorage.setItem('stickerKcal', JSON.stringify(STICKER_KCAL));
   saveCustomStickers();
   // Save built-in overrides
   localStorage.setItem('builtinLabels', JSON.stringify(BUILTIN_LABELS));
