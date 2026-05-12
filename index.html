@@ -1199,8 +1199,8 @@ function onPlacedStickerDown(e) {
       document.body.appendChild(ghost);
       // Position trash 250px below grab point, clamped to viewport
       const trashSize = window.innerWidth <= 600 ? 44 : 64;
-      let tx = startX - trashSize / 2;
-      let ty = startY + 250 - trashSize / 2;
+      let tx = startX + 100 - trashSize / 2;
+      let ty = startY + 100 - trashSize / 2;
       tx = Math.max(8, Math.min(window.innerWidth - trashSize - 8, tx));
       ty = Math.max(8, Math.min(window.innerHeight - trashSize - 8, ty));
       trashEl.style.left = tx + 'px';
