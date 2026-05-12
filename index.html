@@ -101,6 +101,16 @@
     user-select: none;
   }
   .cell .steps:hover { color: #000; }
+  .cell-kcal {
+    position: absolute;
+    bottom: 8px;
+    left: 4px;
+    font-size: 16px;
+    color: #999;
+    z-index: 3;
+    user-select: none;
+    pointer-events: none;
+  }
 
   .cell .day-name {
     display: none;
@@ -1006,6 +1016,28 @@ function populateMonthSelect() {
   }
 }
 
+const BASE_KCAL = 1745;
+// kcal per sticker, matched by color id or label
+const STICKER_KCAL_BY_COLOR = { grey: 80 }; // stairs = 80 kcal
+const STICKER_KCAL_BY_LABEL = { pingpong: 325 }; // pingpong = 325 kcal/hr
+
+function calcDayKcal(key) {
+  const stickers = calendarData[key] || [];
+  const steps = stepsData[key] || 0;
+  let extra = steps * 0.045; // walk: 0.045 kcal per step
+  stickers.forEach(st => {
+    if (STICKER_KCAL_BY_COLOR[st.color] !== undefined) {
+      extra += STICKER_KCAL_BY_COLOR[st.color];
+    } else {
+      const lbl = getLabel(st.color).toLowerCase();
+      if (STICKER_KCAL_BY_LABEL[lbl] !== undefined) {
+        extra += STICKER_KCAL_BY_LABEL[lbl];
+      }
+    }
+  });
+  return BASE_KCAL + Math.round(extra);
+}
+
 function render() {
   const cal = document.getElementById('calendar');
   cal.innerHTML = '';
@@ -1085,6 +1117,13 @@ function render() {
       render();
     });
     cell.appendChild(stepsEl);
+
+    // Calorie display (bottom-left): base + stairs + pingpong + walk from steps
+    const kcalEl = document.createElement('span');
+    kcalEl.className = 'cell-kcal';
+    const kcal = calcDayKcal(key);
+    kcalEl.textContent = (kcal / 1000).toFixed(1).replace(/\.0$/, '') + 'k';
+    cell.appendChild(kcalEl);
 
     const stickers = calendarData[key] || [];
     stickers.forEach((st, idx) => {
