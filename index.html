@@ -58,12 +58,38 @@
   .cell .date-num {
     position: absolute;
     top: 3px;
-    right: 4px;
+    left: 4px;
     font-size: 9px;
     color: #999;
     font-weight: 400;
     z-index: 1;
     pointer-events: none;
+  }
+  .cell-plus {
+    position: absolute;
+    top: 1px;
+    right: 4px;
+    font-size: 15px;
+    color: #ccc;
+    cursor: pointer;
+    z-index: 3;
+    user-select: none;
+    line-height: 1;
+  }
+  .cell-plus:hover { color: #000; }
+  .tracker-list {
+    position: absolute;
+    right: 6px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 8px;
+    color: #888;
+    z-index: 1;
+    pointer-events: none;
+    text-align: right;
+    line-height: 1.6;
+    max-width: 65%;
+    overflow: hidden;
   }
   .cell .steps {
     position: absolute;
@@ -418,6 +444,94 @@
   }
   .add-popup .delete-btn.hidden { display: none; }
 
+  /* Tracker popup */
+  .tracker-popup {
+    display: none;
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 240px;
+    background: #fff;
+    border: 1px solid #000;
+    padding: 16px;
+    z-index: 400;
+    flex-direction: column;
+    gap: 8px;
+    font-size: 11px;
+  }
+  .tracker-popup.open { display: flex; }
+  .tracker-popup-title {
+    font-size: 10px;
+    color: #999;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 2px;
+  }
+  .tracker-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .tracker-item-text {
+    flex: 1;
+    font-size: 11px;
+    word-break: break-word;
+  }
+  .tracker-item-del {
+    font-family: inherit;
+    font-size: 13px;
+    border: none;
+    background: none;
+    color: #e00;
+    cursor: pointer;
+    padding: 0 2px;
+    line-height: 1;
+    flex-shrink: 0;
+  }
+  .tracker-add-row {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    margin-top: 4px;
+  }
+  .tracker-add-row input {
+    flex: 1;
+    font-family: inherit;
+    font-size: 11px;
+    border: 1px solid #ccc;
+    border-bottom: 1px solid #000;
+    border-top: none;
+    border-left: none;
+    border-right: none;
+    padding: 4px 2px;
+    outline: none;
+    background: transparent;
+  }
+  .tracker-add-row button {
+    font-family: inherit;
+    font-size: 16px;
+    border: 1px solid #000;
+    background: #000;
+    color: #fff;
+    width: 28px;
+    height: 28px;
+    cursor: pointer;
+    line-height: 1;
+    flex-shrink: 0;
+  }
+  .tracker-done-btn {
+    font-family: inherit;
+    font-size: 11px;
+    border: 1px solid #000;
+    background: #fff;
+    color: #000;
+    padding: 5px 12px;
+    cursor: pointer;
+    align-self: flex-start;
+    margin-top: 4px;
+  }
+
   /* --- Mobile --- */
   @media (max-width: 600px) {
     html, body {
@@ -442,10 +556,6 @@
 
     .cell .date-num {
       font-size: 8px;
-    }
-
-    .cell .day-name {
-      display: block;
     }
 
     .placed-sticker {
@@ -575,6 +685,17 @@
   </div>
 </div>
 
+<div class="popup-overlay" id="tracker-overlay"></div>
+<div class="tracker-popup" id="tracker-popup">
+  <div class="tracker-popup-title" id="tracker-popup-title"></div>
+  <div id="tracker-items-list"></div>
+  <div class="tracker-add-row">
+    <input type="text" id="tracker-input" placeholder="add item..." maxlength="60">
+    <button id="tracker-add-btn">+</button>
+  </div>
+  <button class="tracker-done-btn" id="tracker-done-btn">done</button>
+</div>
+
 <div class="trash" id="trash">&times;</div>
 
 <script>
@@ -586,6 +707,8 @@ let currentMonth = new Date().getMonth();
 let calendarData = {};
 let stepsData = {};
 try { stepsData = JSON.parse(localStorage.getItem('stepsData')) || {}; } catch { stepsData = {}; }
+let trackerData = {};
+try { trackerData = JSON.parse(localStorage.getItem('trackerData')) || {}; } catch { trackerData = {}; }
 let saveTimeout = null;
 const BUILTIN_LABELS = { yellow: 'oko', green: 'walk', orange: 'bench', red: 'pushups', blue: 'squats', grey: '' };
 const STAIRS_SVG = '<svg class="sticker-icon" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="#fff" stroke-width="1.5"><path d="M4 20h4v-4h4v-4h4v-4h4"/></svg>';
@@ -739,6 +862,7 @@ function buildSyncData() {
   return {
     calendarData,
     stepsData,
+    trackerData,
     customStickers,
     builtinLabels: BUILTIN_LABELS,
     builtinColors: BUILTIN_COLORS
@@ -753,6 +877,10 @@ function applySyncData(data) {
   if (data.stepsData) {
     stepsData = data.stepsData;
     localStorage.setItem('stepsData', JSON.stringify(stepsData));
+  }
+  if (data.trackerData) {
+    trackerData = data.trackerData;
+    localStorage.setItem('trackerData', JSON.stringify(trackerData));
   }
   if (data.customStickers) {
     customStickers = data.customStickers;
@@ -832,6 +960,7 @@ function scheduleSave() {
 
 async function saveData() {
   localStorage.setItem('calendarData', JSON.stringify(calendarData));
+  localStorage.setItem('trackerData', JSON.stringify(trackerData));
   await cloudWrite();
 }
 
@@ -909,18 +1038,30 @@ function render() {
     cell.className = 'cell';
     cell.dataset.key = key;
 
-    const dn = document.createElement('span');
-    dn.className = 'date-num';
-    dn.textContent = day;
-    cell.appendChild(dn);
-
-    // Day name for mobile (hidden on desktop via CSS)
+    // Date label: "Mon 12" on mobile, "12" on desktop
     let dow = new Date(currentYear, currentMonth, day).getDay();
     dow = dow === 0 ? 6 : dow - 1;
-    const dayName = document.createElement('span');
-    dayName.className = 'day-name';
-    dayName.textContent = DAYS[dow];
-    cell.appendChild(dayName);
+    const dn = document.createElement('span');
+    dn.className = 'date-num';
+    dn.textContent = isMobile ? `${DAYS[dow]} ${day}` : day;
+    cell.appendChild(dn);
+
+    // + button top-right to open tracker popup
+    const plusBtn = document.createElement('span');
+    plusBtn.className = 'cell-plus';
+    plusBtn.textContent = '+';
+    plusBtn.addEventListener('pointerdown', (e) => e.stopPropagation());
+    plusBtn.addEventListener('pointerup', (e) => { e.preventDefault(); e.stopPropagation(); openTrackerPopup(key); });
+    cell.appendChild(plusBtn);
+
+    // Tracker items preview (right side, middle)
+    const trackerItems = trackerData[key] || [];
+    if (trackerItems.length > 0) {
+      const tlist = document.createElement('div');
+      tlist.className = 'tracker-list';
+      tlist.innerHTML = trackerItems.map(i => `<div>\u2013 ${i}</div>`).join('');
+      cell.appendChild(tlist);
+    }
 
     // Steps counter
     const stepsEl = document.createElement('span');
@@ -970,7 +1111,7 @@ function render() {
     // Tap-to-place: if a palette sticker is selected, tap cell to place
     cell.addEventListener('pointerup', (e) => {
       if (!selectedPaletteColor) return;
-      if (e.target.closest('.placed-sticker') || e.target.closest('.steps')) return;
+      if (e.target.closest('.placed-sticker') || e.target.closest('.steps') || e.target.closest('.cell-plus')) return;
       const rect = cell.getBoundingClientRect();
       const x = Math.max(0.1, Math.min(0.9, (e.clientX - rect.left) / rect.width));
       const y = Math.max(0.1, Math.min(0.9, (e.clientY - rect.top) / rect.height));
@@ -1290,6 +1431,76 @@ function updateSaveLink() {
     saveLinkEl.onclick = () => { if (confirm('log out?')) logout(); };
   }
 }
+
+// --- Tracker popup ---
+let trackerEditKey = null;
+const trackerOverlay = document.getElementById('tracker-overlay');
+const trackerPopupEl = document.getElementById('tracker-popup');
+const trackerTitleEl = document.getElementById('tracker-popup-title');
+const trackerListEl = document.getElementById('tracker-items-list');
+const trackerInput = document.getElementById('tracker-input');
+const trackerAddBtn = document.getElementById('tracker-add-btn');
+const trackerDoneBtn = document.getElementById('tracker-done-btn');
+
+function openTrackerPopup(key) {
+  trackerEditKey = key;
+  const [y, m, d] = key.split('-');
+  trackerTitleEl.textContent = `${parseInt(d)} ${MONTHS[parseInt(m) - 1].toLowerCase()}`;
+  renderTrackerItems();
+  trackerOverlay.classList.add('open');
+  trackerPopupEl.classList.add('open');
+  trackerInput.value = '';
+  setTimeout(() => trackerInput.focus(), 50);
+}
+
+function closeTrackerPopup() {
+  trackerEditKey = null;
+  trackerOverlay.classList.remove('open');
+  trackerPopupEl.classList.remove('open');
+}
+
+function renderTrackerItems() {
+  trackerListEl.innerHTML = '';
+  const items = trackerData[trackerEditKey] || [];
+  items.forEach((item, idx) => {
+    const row = document.createElement('div');
+    row.className = 'tracker-item';
+    const text = document.createElement('span');
+    text.className = 'tracker-item-text';
+    text.textContent = item;
+    const del = document.createElement('button');
+    del.className = 'tracker-item-del';
+    del.textContent = '\u00d7';
+    del.addEventListener('pointerup', (e) => {
+      e.preventDefault();
+      trackerData[trackerEditKey].splice(idx, 1);
+      if (trackerData[trackerEditKey].length === 0) delete trackerData[trackerEditKey];
+      renderTrackerItems();
+      scheduleSave();
+      render();
+    });
+    row.appendChild(text);
+    row.appendChild(del);
+    trackerListEl.appendChild(row);
+  });
+}
+
+function addTrackerItem() {
+  const val = trackerInput.value.trim();
+  if (!val || !trackerEditKey) return;
+  if (!trackerData[trackerEditKey]) trackerData[trackerEditKey] = [];
+  trackerData[trackerEditKey].push(val);
+  trackerInput.value = '';
+  renderTrackerItems();
+  scheduleSave();
+  render();
+  trackerInput.focus();
+}
+
+trackerAddBtn.addEventListener('pointerup', (e) => { e.preventDefault(); addTrackerItem(); });
+trackerInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') addTrackerItem(); });
+trackerDoneBtn.addEventListener('pointerup', (e) => { e.preventDefault(); closeTrackerPopup(); });
+trackerOverlay.addEventListener('click', closeTrackerPopup);
 
 tryAutoLogin();
 
